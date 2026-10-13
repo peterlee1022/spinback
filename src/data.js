@@ -220,3 +220,147 @@ export function daySummary(data, day, artist = null) {
     topTrack: topTrack ? { track: topTrack[0].split('\u0000')[0], artist: topTrack[0].split('\u0000')[1] } : null,
   };
 }
+
+// ---------- demo listener ----------
+
+function mulberry32(seed) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const WORD_A = ['Glass', 'Paper', 'Neon', 'Slow', 'Golden', 'Quiet', 'Electric', 'Velvet', 'Midnight', 'Hollow',
+  'Silver', 'Lucky', 'Northern', 'Soft', 'Wild', 'Summer', 'Winter', 'Coastal', 'Faded', 'Bright', 'Lonely', 'Copper',
+  'Sleepy', 'Cherry', 'Distant', 'Tiny'];
+const WORD_B = ['Season', 'Hearts', 'Signal', 'Motel', 'Garden', 'Satellite', 'Tides', 'Avenue', 'Parade', 'Fever',
+  'Weather', 'Ghosts', 'Lanterns', 'Highway', 'Rooms', 'Machines', 'Daydream', 'Echoes', 'Kingdom', 'Postcards',
+  'Orchard', 'Skyline', 'Ferris Wheel', 'Telephone', 'Swimming Pool', 'Planets'];
+const TAIL_A = ['Crystal', 'Sunday', 'Arcade', 'Hollow', 'Cardboard', 'Moon', 'Static', 'Velour', 'Pocket', 'Tangerine',
+  'Laser', 'Honey', 'Ivory', 'Cosmic', 'Rust'];
+const TAIL_B = ['Engines', 'Pines', 'Ghosts', 'Kids', 'Bloom', 'Motel', 'Club', 'Wolves', 'Society', 'Radio', 'Twins',
+  'Department', 'Hotel', 'Parade', 'Fax'];
+
+// name, weight, peak month (0-11), spread in months
+const HEADLINERS = [
+  ['Neon Harbor', 1.0, 0.5, 2.2],
+  ['Velvet Static', 0.95, 6.3, 1.5],
+  ['The Paper Moons', 0.8, 3.2, 1.8],
+  ['Kaito Rain', 0.85, 9.4, 1.3],
+  ['Marisol Vey', 0.6, 6, 6],
+  ['Lumen', 0.55, 10.4, 0.9],
+  ['Saltwater Choir', 0.5, 7, 1.0],
+  ['Glasshouse Dogs', 0.5, 4.6, 1.4],
+  ['Juniper & the Fog', 0.45, 11.4, 1.0],
+  ['DJ Moth', 0.4, 8, 4],
+  ['Low Orbit', 0.38, 1.5, 5],
+];
+
+const WEEKDAY = [8, 3, 0, 0, 0, 0, 2, 18, 40, 22, 14, 12, 20, 14, 12, 14, 18, 38, 30, 20, 28, 36, 34, 20];
+const WEEKEND = [26, 18, 8, 2, 0, 0, 0, 0, 0, 4, 14, 22, 26, 30, 34, 30, 28, 24, 20, 22, 30, 38, 40, 34];
+
+export function demoRecords(year = 2025) {
+  const rnd = mulberry32(1022);
+  const pick = (arr) => arr[(rnd() * arr.length) | 0];
+
+  const makeTracks = (n) => {
+    const out = new Set();
+    while (out.size < n) {
+      const a = pick(WORD_A);
+      const b = pick(WORD_B);
+      const r = rnd();
+      out.add(r < 0.55 ? `${a} ${b}` : r < 0.7 ? `The ${a} ${b}` : r < 0.82 ? `${b} (Reprise)` : r < 0.92 ? `${a} ${b}, Pt. II` : `${b}`);
+    }
+    return [...out];
+  };
+
+  const artists = HEADLINERS.map(([name, w, peak, spread]) => ({ name, w, peak, spread, tracks: makeTracks(6 + ((rnd() * 9) | 0)) }));
+  const tailNames = new Set();
+  while (tailNames.size < 170) tailNames.add(`${rnd() < 0.4 ? 'The ' : ''}${pick(TAIL_A)} ${pick(TAIL_B)}`);
+  for (const name of tailNames) {
+    if (artists.some((a) => a.name === name)) continue;
+    artists.push({ name, w: 0.001 + Math.pow(rnd(), 4) * 0.03, peak: rnd() * 12, spread: 1 + rnd() * 5, tracks: makeTracks(2 + ((rnd() * 4) | 0)) });
+  }
+  const idx = Object.fromEntries(artists.map((a, i) => [a.name, i]));
+
+  const records = [];
+  const days = isLeap(year) ? 366 : 365;
+  const weights = new Float64Array(artists.length);
+
+  for (let day = 0; day < days; day++) {
+    const date = new Date(year, 0, 1 + day);
+    const month = date.getMonth() + date.getDate() / 31;
+    const dow = date.getDay();
+    let weekend = dow === 0 || dow === 6;
+
+    let dayFactor = 0.8 + rnd() * 0.4;
+    if (rnd() < 0.07) dayFactor = 0.2;
+    const lostHeadphones = day >= 95 && day <= 102;
+    const roadTrip = day >= 196 && day <= 210;
+    const crunch = day >= 305 && day <= 320;
+    const holidays = day >= 355;
+    if (lostHeadphones) dayFactor = 0.04;
+    if (roadTrip) { dayFactor = 1.6; weekend = true; }
+    if (crunch) dayFactor *= 1.15;
+
+    for (let i = 0; i < artists.length; i++) {
+      const a = artists[i];
+      let dist = Math.abs(month - a.peak);
+      dist = Math.min(dist, 12 - dist);
+      weights[i] = a.w * (0.08 + 3 * Math.exp(-(dist * dist) / (2 * a.spread * a.spread)));
+    }
+    if (roadTrip) { weights[idx['Saltwater Choir']] *= 3; weights[idx['Velvet Static']] *= 2; }
+    if (holidays) weights[idx['Juniper & the Fog']] *= 3;
+
+    const curve = weekend ? WEEKEND : WEEKDAY;
+    let prev = -1;
+    // most days have an artist you keep coming back to
+    let mood = 0;
+    {
+      let total = 0;
+      for (const x of weights) total += x;
+      let r = rnd() * total;
+      while (r > weights[mood] && mood < weights.length - 1) r -= weights[mood++];
+    }
+    for (let h = 0; h < 24; h++) {
+      let expected = curve[h];
+      if (crunch && (h <= 2 || h >= 22)) expected += 25;
+      let mins = expected * dayFactor * (0.35 + rnd() * 0.75);
+      if (rnd() < 0.18) mins = 0;
+      mins = Math.min(58, mins);
+      if (mins < 2) continue;
+
+      const w = Float64Array.from(weights);
+      const focus = !weekend && h >= 9 && h <= 16;
+      if (focus || crunch) w[idx['Lumen']] *= crunch ? 6 : 3;
+      if (weekend && (h >= 22 || h <= 2)) w[idx['DJ Moth']] *= 4;
+      let total = 0;
+      for (const x of w) total += x;
+
+      const hourStart = new Date(year, 0, 1 + day, h).getTime();
+      let t = hourStart + rnd() * 180000;
+      let elapsed = 0;
+      while (elapsed < mins * 60000 && t < hourStart + 3600000) {
+        let ai = prev;
+        const roll = rnd();
+        if (roll < 0.5) ai = mood;
+        else if (ai < 0 || roll > 0.75) {
+          let r = rnd() * total;
+          ai = 0;
+          while (r > w[ai] && ai < w.length - 1) r -= w[ai++];
+        }
+        prev = ai;
+        const a = artists[ai];
+        const track = a.tracks[Math.floor(a.tracks.length * Math.pow(rnd(), 2.2))];
+        const ms = rnd() < 0.1 ? 4000 + rnd() * 25000 : 140000 + rnd() * 130000;
+        records.push({ t, ms, artist: a.name, track });
+        t += ms;
+        elapsed += ms;
+      }
+    }
+  }
+  return records;
+}
