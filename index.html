@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spinback</title>
+    <meta name="description" content="Your year of Spotify listening, pressed onto a spinning 3D record." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='15' fill='%2312121a'/><circle cx='16' cy='16' r='6' fill='%23ff6b6b'/><circle cx='16' cy='16' r='1.5' fill='%2312121a'/></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <div class="vignette"></div>
+
+    <header class="brand panel-free">
+      <div class="logo"><span class="logo-disc"></span>spinback</div>
+      <div class="tag" id="sourceTag">Demo listener</div>
+      <div class="years" id="years"></div>
+    </header>
+
+    <section class="stats" id="stats">
+      <div class="stat"><b id="sHours">0</b><span>hours</span></div>
+      <div class="stat"><b id="sPlays">0</b><span>plays</span></div>
+      <div class="stat"><b id="sArtists">0</b><span>artists</span></div>
+      <button class="stat link" id="sBusiest" title="Drop the needle on your busiest day"><b>-</b><span>busiest day</span></button>
+    </section>
+
+    <aside class="needle panel" id="needle">
+      <div class="eyebrow"><span class="led"></span>Under the needle<span class="solo-badge" id="soloBadge"></span></div>
+      <div class="n-date" id="nDate">&nbsp;</div>
+      <div class="n-big" id="nBig">&nbsp;</div>
+      <div class="n-line" id="nArtist">&nbsp;</div>
+      <div class="n-line dim" id="nTrack">&nbsp;</div>
+      <div class="n-hours" id="nHours"></div>
+      <div class="n-axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>
+    </aside>
+
+    <section class="legend panel" id="legend"></section>
+
+    <nav class="deck panel">
+      <button id="playBtn" class="round big" title="Pause the record">
+        <svg class="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+        <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+      </button>
+      <div class="rpm" id="rpm" title="Spin speed">
+        <button data-rpm="33" class="on">33</button><button data-rpm="45">45</button><button data-rpm="78">78</button>
+        <span>rpm</span>
+      </div>
+      <button id="crackleBtn" class="round" title="Vinyl crackle (off)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor" stroke="none"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="mute" d="m16 9 5 6m0-6-5 6"/></svg>
+      </button>
+      <button id="viewBtn" class="round" title="Reset the camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      </button>
+      <span class="sep"></span>
+      <button id="loadBtn" class="pill accent">Press your own record</button>
+      <button id="helpBtn" class="round" title="How to get your Spotify data">?</button>
+    </nav>
+
+    <div class="hint" id="hint">drag to orbit &middot; scroll to zoom &middot; click a bar to drop the needle there</div>
+
+    <div class="tooltip" id="tooltip"></div>
+    <div class="toast" id="toast"></div>
+
+    <div class="drop" id="drop">
+      <div class="drop-inner">
+        <div class="drop-disc"></div>
+        <b>Drop your Spotify export</b>
+        <span>the .zip from Spotify, or the StreamingHistory .json files inside it</span>
+      </div>
+    </div>
+
+    <div class="modal" id="help" hidden>
+      <div class="modal-card panel">
+        <button class="close round" id="helpClose" title="Close">&times;</button>
+        <h2>Press your own record</h2>
+        <ol>
+          <li>Open your <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noopener">Spotify privacy settings</a> and scroll to <em>Download your data</em>.</li>
+          <li>Tick <b>Account data</b> (about 5 days, last year of listening) or <b>Extended streaming history</b> (up to 30 days, every year you have ever streamed).</li>
+          <li>When the email shows up, download the zip and drop it anywhere on this page. No need to unzip it.</li>
+        </ol>
+        <p class="fine">Your files never leave this tab. Everything is parsed locally in your browser, nothing gets uploaded.</p>
+        <button class="pill accent" id="helpLoad">Choose files</button>
+      </div>
+    </div>
+
+    <input type="file" id="file" multiple accept=".zip,.json,application/json,application/zip" hidden />
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
