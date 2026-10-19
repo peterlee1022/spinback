@@ -2,6 +2,8 @@
 
 Your year of Spotify listening, pressed onto a spinning 3D record.
 
+![Spinback showing a demo listener's year on the record](docs/overview.png)
+
 Every day of the year is a spoke on the disc and every hour is a groove ring, with midnight by the label and 11pm out at the rim. Bar height is how many minutes you listened in that hour, and the colour is whichever artist you played most in it. The tonearm reads the day passing under it, so leaving it spinning on a second monitor plays back your year one day at a time.
 
 ## Things to do
@@ -10,6 +12,10 @@ Every day of the year is a spoke on the disc and every hour is a groove ring, wi
 - Click an artist in the legend to press a record of just them. Seasonal phases show up really clearly this way.
 - Switch between 33, 45 and 78 rpm, pause to lift the arm, and turn on the vinyl crackle if you like.
 - Click "busiest day" to jump straight to it.
+
+![Solo view showing one artist's listening across the year](docs/solo.png)
+
+In solo view above, that artist's summer peak shows up as the tall stretch of bars.
 
 ## Using your own data
 
