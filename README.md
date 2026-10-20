@@ -10,12 +10,15 @@ Every day of the year is a spoke on the disc and every hour is a groove ring, wi
 
 - Hover any bar to see what you were playing that hour, and click it to drop the needle on that day.
 - Click an artist in the legend to press a record of just them. Seasonal phases show up really clearly this way.
+- Switch the colours between artist, hour of day and heat. Colouring by hour turns your daily routine into rings, and it is usually the calmer view for real data with lots of artists.
+- Open the liner notes for your song of the year, longest streak, the song you put on loop, how much of a night owl you are and a few more.
+- Save a snapshot of the record as a PNG to share.
 - Switch between 33, 45 and 78 rpm, pause to lift the arm, and turn on the vinyl crackle if you like.
-- Click "busiest day" to jump straight to it.
+- Leave it alone for a bit and the camera starts drifting around the record, which makes it a nice thing to have open on a second monitor.
 
-![Solo view showing one artist's listening across the year](docs/solo.png)
+![The same year coloured by hour of day](docs/hour.png)
 
-In solo view above, that artist's summer peak shows up as the tall stretch of bars.
+![Liner notes for the demo listener](docs/notes.png)
 
 ## Using your own data
 
