@@ -221,6 +221,76 @@ export function daySummary(data, day, artist = null) {
   };
 }
 
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// Fun facts for the liner notes card.
+export function linerNotes(data) {
+  const { cells, days, year, dayMs, totalMs } = data;
+  const trackMs = new Map();
+  const trackPlays = new Map();
+  const weekdayMs = new Float64Array(7);
+  const weekdayCount = new Float64Array(7);
+  const monthMs = new Float64Array(12);
+  let night = 0;
+  let first = null;
+  let loop = null;
+
+  for (let d = 0; d < days; d++) {
+    const date = new Date(year, 0, 1 + d);
+    weekdayMs[date.getDay()] += dayMs[d];
+    weekdayCount[date.getDay()]++;
+    monthMs[date.getMonth()] += dayMs[d];
+    const today = new Map();
+    for (let h = 0; h < 24; h++) {
+      for (const r of cells[d * 24 + h]) {
+        if (!first || r.t < first.t) first = r;
+        if (h < 5) night += r.ms;
+        const k = r.track + '\u0000' + r.artist;
+        trackMs.set(k, (trackMs.get(k) || 0) + r.ms);
+        if (r.ms < 30000) continue;
+        trackPlays.set(k, (trackPlays.get(k) || 0) + 1);
+        const n = (today.get(k) || 0) + 1;
+        today.set(k, n);
+        if (!loop || n > loop.plays) loop = { plays: n, key: k, day: d };
+      }
+    }
+  }
+
+  let streak = { len: 0, start: 0 };
+  let run = 0;
+  for (let d = 0; d < days; d++) {
+    run = dayMs[d] > 0 ? run + 1 : 0;
+    if (run > streak.len) streak = { len: run, start: d - run + 1 };
+  }
+
+  const split = (k) => k.split('\u0000');
+  const topKey = [...trackMs].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const avg = [...weekdayMs].map((v, i) => v / Math.max(1, weekdayCount[i]));
+  const fav = avg.indexOf(Math.max(...avg));
+  const active = [...monthMs.keys()].filter((m) => monthMs[m] > 0);
+  const peakMonth = active.length ? active.reduce((a, b) => (monthMs[b] > monthMs[a] ? b : a)) : -1;
+  const quietMonth = active.length ? active.reduce((a, b) => (monthMs[b] < monthMs[a] ? b : a)) : -1;
+  const firstDate = first && new Date(first.t);
+
+  return {
+    topTrack: topKey && { track: split(topKey)[0], artist: split(topKey)[1], plays: trackPlays.get(topKey) || 0 },
+    loop: loop && loop.plays > 1 && { track: split(loop.key)[0], artist: split(loop.key)[1], plays: loop.plays, day: loop.day },
+    streak,
+    nightShare: totalMs ? night / totalMs : 0,
+    favDay: WEEKDAYS[fav],
+    favDayMs: avg[fav],
+    monthMs,
+    peakMonth,
+    quietMonth,
+    first: first && {
+      track: first.track,
+      artist: first.artist,
+      day: Math.floor((Date.UTC(year, firstDate.getMonth(), firstDate.getDate()) - Date.UTC(year, 0, 1)) / 864e5),
+      time: firstDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    },
+  };
+}
+
 // ---------- demo listener ----------
 
 function mulberry32(seed) {
@@ -277,7 +347,7 @@ export function demoRecords(year = 2025) {
     return [...out];
   };
 
-  const artists = HEADLINERS.map(([name, w, peak, spread]) => ({ name, w, peak, spread, tracks: makeTracks(6 + ((rnd() * 9) | 0)) }));
+  const artists = HEADLINERS.map(([name, w, peak, spread]) => ({ name, w, peak, spread, tracks: makeTracks(9 + ((rnd() * 10) | 0)) }));
   const tailNames = new Set();
   while (tailNames.size < 170) tailNames.add(`${rnd() < 0.4 ? 'The ' : ''}${pick(TAIL_A)} ${pick(TAIL_B)}`);
   for (const name of tailNames) {
@@ -324,6 +394,7 @@ export function demoRecords(year = 2025) {
       for (const x of weights) total += x;
       let r = rnd() * total;
       while (r > weights[mood] && mood < weights.length - 1) r -= weights[mood++];
+      if (mood >= HEADLINERS.length) mood = (rnd() * HEADLINERS.length) | 0;
     }
     for (let h = 0; h < 24; h++) {
       let expected = curve[h];
@@ -354,7 +425,7 @@ export function demoRecords(year = 2025) {
         }
         prev = ai;
         const a = artists[ai];
-        const track = a.tracks[Math.floor(a.tracks.length * Math.pow(rnd(), 2.2))];
+        const track = a.tracks[Math.floor(a.tracks.length * Math.pow(rnd(), 1.5))];
         const ms = rnd() < 0.1 ? 4000 + rnd() * 25000 : 140000 + rnd() * 130000;
         records.push({ t, ms, artist: a.name, track });
         t += ms;

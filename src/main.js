@@ -8,7 +8,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
-  readFiles, listYears, pickYear, buildYear, demoRecords, cellTracks, daySummary,
+  readFiles, listYears, pickYear, buildYear, demoRecords, cellTracks, daySummary, linerNotes,
   PALETTE, OTHER_COLOR, TOP_N,
 } from './data.js';
 import { createCrackle } from './audio.js';
@@ -332,8 +332,18 @@ const dust = (() => {
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
   const pts = new THREE.Points(geo, new THREE.PointsMaterial({
-    color: '#a9a4ff', size: 0.12, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending,
+    color: '#a9a4ff', map: new THREE.CanvasTexture(c), size: 0.3, transparent: true, opacity: 0.5,
+    depthWrite: false, blending: THREE.AdditiveBlending,
   }));
   scene.add(pts);
   return pts;
@@ -365,6 +375,7 @@ const S = {
   seek: null,
   camTween: null,
   crackle: false,
+  colorMode: 'artist',
   time: 0,
 };
 const crackle = createCrackle();
@@ -467,19 +478,46 @@ function drawLabel(data) {
   labelTex.needsUpdate = true;
 }
 
+// ---------- colour modes ----------
+
+const toStops = (list) => list.map(([x, c]) => [x, new THREE.Color(c)]);
+const RAMPS = {
+  hour: toStops([[0, '#4f5bd5'], [5, '#8d7bff'], [8, '#ffb547'], [13, '#c6f35b'], [17, '#3ee6b0'], [20, '#ff6ad5'], [24, '#4f5bd5']]),
+  heat: toStops([[0, '#2c2f6b'], [0.3, '#8d3bff'], [0.6, '#ff4f7a'], [0.85, '#ffb547'], [1, '#fff2c4']]),
+};
+const RAMP_LABELS = { hour: ['12a', '6a', '12p', '6p', '12a'], heat: ['1 min', '30 min', 'full hour'] };
+const tmpColor = new THREE.Color();
+
+function ramp(stops, x, out) {
+  for (let k = 0; k < stops.length - 1; k++) {
+    const [a, ca] = stops[k];
+    const [b, cb] = stops[k + 1];
+    if (x <= b) return out.copy(ca).lerp(cb, (x - a) / (b - a));
+  }
+  return out.copy(stops[stops.length - 1][1]);
+}
+
+function rampCss(mode) {
+  const stops = RAMPS[mode];
+  const max = stops[stops.length - 1][0];
+  return `linear-gradient(90deg, ${stops.map(([x, c]) => `${c.getStyle()} ${(x / max) * 100}%`).join(', ')})`;
+}
+
+// Colour of cell i holding m minutes, under the current mode.
+function colorFor(i, m) {
+  if (S.colorMode === 'hour') return ramp(RAMPS.hour, (i % 24) + 0.5, tmpColor);
+  if (S.colorMode === 'heat') return ramp(RAMPS.heat, Math.min(1, m / 60), tmpColor);
+  if (S.solo >= 0) return tmpColor.copy(topColors[S.solo]);
+  const t = S.data.topOf[i];
+  return tmpColor.copy(t >= 0 && t < TOP_N ? topColors[t] : otherColor);
+}
+
 function computeBase() {
-  const { N, topOf, minutes, perArtist } = S.data;
+  const { N, minutes, perArtist } = S.data;
   for (let i = 0; i < N; i++) {
-    let col;
-    let m;
-    if (S.solo >= 0) {
-      col = topColors[S.solo];
-      m = perArtist[S.solo * N + i];
-    } else {
-      col = topOf[i] >= 0 && topOf[i] < TOP_N ? topColors[topOf[i]] : otherColor;
-      m = minutes[i];
-    }
-    const shade = 0.7 + 0.3 * Math.min(1, m / 45);
+    const m = S.solo >= 0 ? perArtist[S.solo * N + i] : minutes[i];
+    const col = colorFor(i, m);
+    const shade = S.colorMode === 'heat' ? 1 : 0.7 + 0.3 * Math.min(1, m / 45);
     base[i * 3] = col.r * shade;
     base[i * 3 + 1] = col.g * shade;
     base[i * 3 + 2] = col.b * shade;
@@ -599,11 +637,7 @@ const colorOfArtist = (name) => {
   const i = S.data.topIndex.get(name);
   return i === undefined ? OTHER_COLOR : PALETTE[i];
 };
-const cellColor = (i) => {
-  if (S.solo >= 0) return PALETTE[S.solo];
-  const t = S.data.topOf[i];
-  return t >= 0 && t < TOP_N ? PALETTE[t] : OTHER_COLOR;
-};
+const cellColor = (i) => colorFor(i, cellMinutes(i)).getStyle();
 const soloName = () => (S.solo >= 0 ? S.data.top[S.solo].name : null);
 const cellMinutes = (i) => (S.solo >= 0 ? S.data.perArtist[S.solo * S.data.N + i] : S.data.minutes[i]);
 
@@ -673,7 +707,12 @@ function renderLegend() {
   const el = $('#legend');
   const d = S.data;
   const topMs = d.top.reduce((s, a) => s + a.ms, 0);
-  el.innerHTML = `<h3><span>Top artists</span><button id="soloClear">show all</button></h3>`;
+  const mode = S.colorMode;
+  el.innerHTML = `<div class="mode"><span>Color by</span><div class="seg">${['artist', 'hour', 'heat']
+    .map((m) => `<button data-mode="${m}" class="${m === mode ? 'on' : ''}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>
+    ${mode === 'artist' ? '' : `<div class="ramp"><i style="background:${rampCss(mode)}"></i><div>${RAMP_LABELS[mode].map((l) => `<span>${l}</span>`).join('')}</div></div>`}
+    <h3><span>Top artists</span><button id="soloClear">show all</button></h3>`;
+  for (const b of el.querySelectorAll('.seg button')) b.addEventListener('click', () => setColorMode(b.dataset.mode));
   d.top.forEach((a, i) => {
     const b = document.createElement('button');
     b.className = 'chip' + (S.solo === i ? ' on' : '');
@@ -767,6 +806,67 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
 }
 
+// ---------- prefs ----------
+
+const prefs = (() => {
+  try { return JSON.parse(localStorage.getItem('spinback') || '{}'); } catch { return {}; }
+})();
+function savePrefs() {
+  try { localStorage.setItem('spinback', JSON.stringify({ rpm: S.rpm, colorMode: S.colorMode })); } catch { /* private mode */ }
+}
+
+// ---------- liner notes ----------
+
+function renderNotes() {
+  const n = linerNotes(S.data);
+  const day = (d) => dateOf(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const hrs = (ms) => `${Math.round(ms / 3.6e6).toLocaleString()} hours`;
+  const items = [];
+  if (n.topTrack) items.push(['Song of the year', n.topTrack.track, `${esc(n.topTrack.artist)} &middot; ${n.topTrack.plays.toLocaleString()} plays`, colorOfArtist(n.topTrack.artist)]);
+  if (n.loop) items.push(['On loop', n.loop.track, `${n.loop.plays} plays on ${day(n.loop.day)}`, colorOfArtist(n.loop.artist)]);
+  if (n.streak.len) items.push(['Longest streak', `${n.streak.len} days`, `${day(n.streak.start)} to ${day(n.streak.start + n.streak.len - 1)}`]);
+  items.push(['Night owl', `${Math.round(n.nightShare * 100)}%`, 'of your listening was between midnight and 5am']);
+  items.push(['Favorite day', `${n.favDay}s`, `about ${fmtDur(n.favDayMs)} on an average one`]);
+  if (n.peakMonth >= 0) items.push(['Peak month', MONTHS[n.peakMonth], hrs(n.monthMs[n.peakMonth])]);
+  if (n.quietMonth >= 0 && n.quietMonth !== n.peakMonth) items.push(['Quietest month', MONTHS[n.quietMonth], hrs(n.monthMs[n.quietMonth])]);
+  if (n.first) items.push(['First song of the year', n.first.track, `${esc(n.first.artist)} &middot; ${day(n.first.day)}, ${n.first.time}`, colorOfArtist(n.first.artist)]);
+  $('#notesTitle').textContent = `${S.source === 'demo' ? "A made-up listener's" : 'Your'} ${S.data.year}`;
+  $('#notesGrid').innerHTML = items.map(([label, value, detail, color]) => `<div class="note">
+      <span>${label}</span>
+      <b>${color ? `<i style="background:${color}"></i>` : ''}${esc(value)}</b>
+      <em>${detail}</em>
+    </div>`).join('');
+}
+
+// ---------- snapshot ----------
+
+function snapshot() {
+  composer.render();
+  const src = renderer.domElement;
+  const c = document.createElement('canvas');
+  c.width = src.width;
+  c.height = src.height;
+  const g = c.getContext('2d');
+  g.drawImage(src, 0, 0);
+  const k = c.height / 900;
+  const d = S.data;
+  g.fillStyle = 'rgba(255,255,255,0.94)';
+  g.font = `700 ${36 * k}px "Space Grotesk", system-ui`;
+  g.fillText('spinback', 40 * k, c.height - 66 * k);
+  g.fillStyle = 'rgba(255,255,255,0.6)';
+  g.font = `500 ${18 * k}px Inter, system-ui`;
+  const top = d.top[0] ? ` \u00b7 most played: ${d.top[0].name}` : '';
+  g.fillText(`${d.year} \u00b7 ${Math.round(d.totalMs / 3.6e6).toLocaleString()} hours${top}`, 40 * k, c.height - 36 * k);
+  c.toBlob((blob) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `spinback-${d.year}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  });
+  toast('Snapshot saved');
+}
+
 // ---------- actions ----------
 
 function setDataset(records, source) {
@@ -791,6 +891,15 @@ function loadYear(year) {
   renderSource();
   applyTargets(true);
   updateNeedle(true);
+}
+
+function setColorMode(mode) {
+  S.colorMode = mode;
+  savePrefs();
+  computeBase();
+  paintAll();
+  renderLegend();
+  renderNeedleCard();
 }
 
 function setSolo(i) {
@@ -839,6 +948,7 @@ $('#playBtn').addEventListener('click', () => setPlaying(!S.playing));
 for (const b of document.querySelectorAll('#rpm button')) {
   b.addEventListener('click', () => {
     S.rpm = Number(b.dataset.rpm);
+    savePrefs();
     for (const o of document.querySelectorAll('#rpm button')) o.classList.toggle('on', o === b);
     if (!S.playing) setPlaying(true);
   });
@@ -852,6 +962,11 @@ $('#crackleBtn').addEventListener('click', () => {
 $('#viewBtn').addEventListener('click', flyHome);
 $('#loadBtn').addEventListener('click', () => $('#file').click());
 $('#helpBtn').addEventListener('click', () => { $('#help').hidden = false; });
+$('#notesBtn').addEventListener('click', () => { renderNotes(); $('#notes').hidden = false; });
+$('#notesClose').addEventListener('click', () => { $('#notes').hidden = true; });
+$('#notes').addEventListener('click', (e) => { if (e.target.id === 'notes') $('#notes').hidden = true; });
+$('#notesSnap').addEventListener('click', () => { $('#notes').hidden = true; requestAnimationFrame(snapshot); });
+$('#snapBtn').addEventListener('click', snapshot);
 $('#helpClose').addEventListener('click', () => { $('#help').hidden = true; });
 $('#helpLoad').addEventListener('click', () => $('#file').click());
 $('#help').addEventListener('click', (e) => { if (e.target.id === 'help') $('#help').hidden = true; });
@@ -864,7 +979,7 @@ $('#sBusiest').addEventListener('click', () => {
 });
 addEventListener('keydown', (e) => {
   if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); setPlaying(!S.playing); }
-  if (e.key === 'Escape') $('#help').hidden = true;
+  if (e.key === 'Escape') { $('#help').hidden = true; $('#notes').hidden = true; }
 });
 
 let dragDepth = 0;
@@ -937,6 +1052,13 @@ const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const timer = new THREE.Timer();
 timer.connect(document);
 let frameNo = 0;
+let lastInput = 0;
+let slowFrames = 0;
+let lowQuality = false;
+controls.autoRotateSpeed = 0.35;
+for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) {
+  addEventListener(ev, () => { lastInput = S.time; controls.autoRotate = false; }, { passive: true });
+}
 
 function frame() {
   requestAnimationFrame(frame);
@@ -944,6 +1066,19 @@ function frame() {
   const dt = Math.min(timer.getDelta(), 0.05);
   S.time += dt;
   frameNo++;
+
+  // Drop to 1x pixel ratio if the GPU is struggling.
+  if (!lowQuality && S.time > 5) {
+    slowFrames = dt > 0.03 ? slowFrames + 1 : Math.max(0, slowFrames - 1);
+    if (slowFrames > 90) {
+      lowQuality = true;
+      renderer.setPixelRatio(1);
+      composer.setPixelRatio(1);
+    }
+  }
+
+  // Left alone (say on a second monitor), the camera drifts around the record.
+  if (!S.camTween && S.time - lastInput > 30) controls.autoRotate = true;
 
   if (S.camTween) {
     const tw = S.camTween;
@@ -980,7 +1115,7 @@ function frame() {
   dust.rotation.y += dt * 0.01;
   dust.position.y = Math.sin(S.time * 0.2) * 0.4;
 
-  controls.update();
+  controls.update(dt);
   composer.render();
 }
 
@@ -988,6 +1123,11 @@ function frame() {
 
 (async () => {
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
+  if (RPM[prefs.rpm]) {
+    S.rpm = prefs.rpm;
+    for (const o of document.querySelectorAll('#rpm button')) o.classList.toggle('on', Number(o.dataset.rpm) === S.rpm);
+  }
+  if (['artist', 'hour', 'heat'].includes(prefs.colorMode)) S.colorMode = prefs.colorMode;
   setDataset(demoRecords(), 'demo');
   S.camTween = { from: camera.position.clone(), to: homePosition(), t: 0, dur: 2.6 };
   setTimeout(() => { if (hintShown) $('#hint').classList.add('gone'); }, 12000);
