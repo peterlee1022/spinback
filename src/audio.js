@@ -3,6 +3,9 @@ export function createCrackle() {
   let ctx = null;
   let gain = null;
   let last = -1;
+  let scratchGain = null;
+  let scratchFilter = null;
+  let lastScratch = -1;
 
   function init() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -36,12 +39,36 @@ export function createCrackle() {
     gain.gain.value = 0;
     src.connect(hp).connect(lpf).connect(gain).connect(ctx.destination);
     src.start();
+
+    // scratch: band-passed noise that rises in pitch and volume with hand speed
+    const nbuf = ctx.createBuffer(1, sr, sr);
+    const nd = nbuf.getChannelData(0);
+    for (let i = 0; i < sr; i++) nd[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = nbuf;
+    noise.loop = true;
+    scratchFilter = ctx.createBiquadFilter();
+    scratchFilter.type = 'bandpass';
+    scratchFilter.Q.value = 1.4;
+    scratchFilter.frequency.value = 400;
+    scratchGain = ctx.createGain();
+    scratchGain.gain.value = 0;
+    noise.connect(scratchFilter).connect(scratchGain).connect(ctx.destination);
+    noise.start();
   }
 
   return {
     wake() {
       if (!ctx) init();
       else if (ctx.state === 'suspended') ctx.resume();
+    },
+    setScratch(speed) {
+      if (!scratchGain) return;
+      const v = Math.min(1, speed / 5);
+      if (Math.abs(v - lastScratch) < 0.01) return;
+      lastScratch = v;
+      scratchFilter.frequency.setTargetAtTime(300 + v * 2600, ctx.currentTime, 0.02);
+      scratchGain.gain.setTargetAtTime(v * 0.35, ctx.currentTime, 0.03);
     },
     setLevel(v) {
       if (!gain || Math.abs(v - last) < 0.01) return;

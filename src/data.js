@@ -11,22 +11,28 @@ const HISTORY_RE = /(StreamingHistory|Streaming_History_Audio)[^/]*\.json$/i;
 // Accepts the zip Spotify emails you, or the JSON files inside it.
 // Handles both "Account data" (StreamingHistory*.json) and
 // "Extended streaming history" (Streaming_History_Audio_*.json).
-export async function readFiles(files) {
+export async function readFiles(files, onProgress = () => {}) {
   const basic = [];
   const extended = [];
+  let done = 0;
   for (const file of files) {
     const lower = file.name.toLowerCase();
     try {
       if (lower.endsWith('.zip')) {
         const buf = new Uint8Array(await file.arrayBuffer());
         const entries = unzipSync(buf, { filter: (f) => HISTORY_RE.test(f.name) });
-        for (const data of Object.values(entries)) collect(strFromU8(data), basic, extended);
+        const parts = Object.values(entries);
+        parts.forEach((data, i) => {
+          collect(strFromU8(data), basic, extended);
+          onProgress(i + 1, parts.length);
+        });
       } else if (lower.endsWith('.json')) {
         collect(await file.text(), basic, extended);
       }
     } catch (err) {
       console.warn('Skipping', file.name, err);
     }
+    if (!file.name.toLowerCase().endsWith('.zip')) onProgress(++done, files.length);
   }
   // Extended history is a superset with better timestamps, so prefer it.
   return dedupe(extended.length ? extended : basic);
@@ -175,9 +181,18 @@ export function buildYear(records, year) {
   for (let d = 1; d < days; d++) if (dayMs[d] > dayMs[busiestDay]) busiestDay = d;
 
   return {
-    year, days, N, cells, minutes, topOf, perArtist, dayMs, top, topIndex,
+    year, days, N, cells, minutes, topOf, perArtist, dayMs, top, topIndex, artists,
     totalMs, plays, artistCount: artists.length, trackCount: tracks.size, busiestDay,
   };
+}
+
+// Minutes per cell for any one artist, for soloing artists outside the top list.
+export function artistMinutes(data, name) {
+  const out = new Float32Array(data.N);
+  for (let i = 0; i < data.N; i++) {
+    for (const r of data.cells[i]) if (r.artist === name) out[i] += r.ms / 60000;
+  }
+  return out;
 }
 
 export function cellTracks(data, idx, artist = null, n = 3) {

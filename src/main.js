@@ -8,7 +8,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
-  readFiles, listYears, pickYear, buildYear, demoRecords, cellTracks, daySummary, linerNotes,
+  readFiles, listYears, pickYear, buildYear, demoRecords, cellTracks, daySummary, linerNotes, artistMinutes,
   PALETTE, OTHER_COLOR, TOP_N,
 } from './data.js';
 import { createCrackle } from './audio.js';
@@ -364,7 +364,7 @@ const S = {
   years: [],
   source: 'demo',
   data: null,
-  solo: -1,
+  solo: null,
   hover: -1,
   selected: -1,
   needleDay: -2,
@@ -507,7 +507,7 @@ function rampCss(mode) {
 function colorFor(i, m) {
   if (S.colorMode === 'hour') return ramp(RAMPS.hour, (i % 24) + 0.5, tmpColor);
   if (S.colorMode === 'heat') return ramp(RAMPS.heat, Math.min(1, m / 60), tmpColor);
-  if (S.solo >= 0) return tmpColor.copy(topColors[S.solo]);
+  if (S.solo) return tmpColor.copy(S.solo.color);
   const t = S.data.topOf[i];
   return tmpColor.copy(t >= 0 && t < TOP_N ? topColors[t] : otherColor);
 }
@@ -515,7 +515,7 @@ function colorFor(i, m) {
 function computeBase() {
   const { N, minutes, perArtist } = S.data;
   for (let i = 0; i < N; i++) {
-    const m = S.solo >= 0 ? perArtist[S.solo * N + i] : minutes[i];
+    const m = S.solo ? S.solo.minutes[i] : minutes[i];
     const col = colorFor(i, m);
     const shade = S.colorMode === 'heat' ? 1 : 0.7 + 0.3 * Math.min(1, m / 45);
     base[i * 3] = col.r * shade;
@@ -548,7 +548,7 @@ function paintAll() {
 function applyTargets(intro) {
   const { N, days, minutes, perArtist } = S.data;
   for (let i = 0; i < N; i++) {
-    const m = S.solo >= 0 ? perArtist[S.solo * N + i] : minutes[i];
+    const m = S.solo ? S.solo.minutes[i] : minutes[i];
     target[i] = heightOf(m);
     if (intro) {
       cur[i] = 0;
@@ -638,8 +638,8 @@ const colorOfArtist = (name) => {
   return i === undefined ? OTHER_COLOR : PALETTE[i];
 };
 const cellColor = (i) => colorFor(i, cellMinutes(i)).getStyle();
-const soloName = () => (S.solo >= 0 ? S.data.top[S.solo].name : null);
-const cellMinutes = (i) => (S.solo >= 0 ? S.data.perArtist[S.solo * S.data.N + i] : S.data.minutes[i]);
+const soloName = () => S.solo?.name ?? null;
+const cellMinutes = (i) => (S.solo ? S.solo.minutes[i] : S.data.minutes[i]);
 
 const hourBars = [];
 {
@@ -663,8 +663,8 @@ const hourBars = [];
 
 function renderNeedleCard() {
   const d = S.needleDay;
-  $('#soloBadge').textContent = S.solo >= 0 ? S.data.top[S.solo].name : '';
-  $('#soloBadge').style.color = S.solo >= 0 ? PALETTE[S.solo] : '';
+  $('#soloBadge').textContent = S.solo?.name ?? '';
+  $('#soloBadge').style.color = S.solo?.css ?? '';
   if (d < 0) {
     $('#nDate').textContent = 'Lead-in groove';
     $('#nBig').textContent = 'New Year';
@@ -680,7 +680,7 @@ function renderNeedleCard() {
     $('#nArtist').innerHTML = `<i style="background:${colorOfArtist(sum.topArtist.name)}"></i><span>mostly <b>${esc(sum.topArtist.name)}</b></span>`;
     $('#nTrack').innerHTML = `<span>on repeat: ${esc(sum.topTrack.track)}</span>`;
   } else {
-    $('#nArtist').innerHTML = `<span>${S.solo >= 0 ? `no ${esc(soloName())} today` : 'not a single song today'}</span>`;
+    $('#nArtist').innerHTML = `<span>${S.solo ? `no ${esc(soloName())} today` : 'not a single song today'}</span>`;
     $('#nTrack').innerHTML = '&nbsp;';
   }
   for (let h = 0; h < 24; h++) {
@@ -715,9 +715,9 @@ function renderLegend() {
   for (const b of el.querySelectorAll('.seg button')) b.addEventListener('click', () => setColorMode(b.dataset.mode));
   d.top.forEach((a, i) => {
     const b = document.createElement('button');
-    b.className = 'chip' + (S.solo === i ? ' on' : '');
+    b.className = 'chip' + (S.solo?.name === a.name ? ' on' : '');
     b.innerHTML = `<i style="background:${a.color};color:${a.color}"></i><span class="name">${esc(a.name)}</span><span class="hrs">${Math.round(a.ms / 3.6e6)}h</span>`;
-    b.addEventListener('click', () => setSolo(S.solo === i ? -1 : i));
+    b.addEventListener('click', () => setSolo(S.solo?.name === a.name ? null : a.name));
     b.addEventListener('pointerenter', (e) => showTooltip(artistTooltip(a), e.clientX, e.clientY));
     b.addEventListener('pointermove', (e) => moveTooltip(e.clientX, e.clientY));
     b.addEventListener('pointerleave', hideTooltip);
@@ -729,8 +729,20 @@ function renderLegend() {
     o.innerHTML = `<i style="background:${OTHER_COLOR};color:transparent"></i><span class="name">${(d.artistCount - d.top.length).toLocaleString()} others</span><span class="hrs">${Math.round((d.totalMs - topMs) / 3.6e6)}h</span>`;
     el.appendChild(o);
   }
-  el.classList.toggle('soloing', S.solo >= 0);
-  $('#soloClear').addEventListener('click', () => setSolo(-1));
+  if (S.solo && S.solo.index < 0) {
+    const b = document.createElement('button');
+    b.className = 'chip on';
+    b.innerHTML = `<i style="background:${S.solo.css};color:${S.solo.css}"></i><span class="name">${esc(S.solo.name)}</span><span class="hrs">${Math.round(S.solo.ms / 3.6e6)}h</span>`;
+    b.addEventListener('click', () => setSolo(null));
+    el.querySelector('h3').after(b);
+  }
+  const find = document.createElement('div');
+  find.className = 'find';
+  find.innerHTML = `<input id="findArtist" placeholder="Find any artist" autocomplete="off" spellcheck="false"><div class="find-list" id="findList"></div>`;
+  el.appendChild(find);
+  wireFind();
+  el.classList.toggle('soloing', !!S.solo);
+  $('#soloClear').addEventListener('click', () => setSolo(null));
 }
 
 function artistTooltip(a) {
@@ -741,7 +753,7 @@ function artistTooltip(a) {
       <li><span><b>${a.plays.toLocaleString()} plays</b><em>peaked in ${MONTHS[a.peakMonth]}</em></span></li>
       <li><span><b>${esc(a.topTrack)}</b><em>most played track</em></span></li>
     </ol>
-    <div class="tt-hint">${S.solo === a.index ? 'click to show everyone again' : 'click to press a record of just them'}</div>`;
+    <div class="tt-hint">${S.solo?.name === a.name ? 'click to show everyone again' : 'click to press a record of just them'}</div>`;
 }
 
 function cellTooltip(i) {
@@ -878,7 +890,7 @@ function setDataset(records, source) {
 
 function loadYear(year) {
   S.data = buildYear(S.records, year);
-  S.solo = -1;
+  S.solo = null;
   S.hover = -1;
   S.selected = -1;
   pulse.fill(0);
@@ -902,8 +914,47 @@ function setColorMode(mode) {
   renderNeedleCard();
 }
 
-function setSolo(i) {
-  S.solo = i;
+const SEARCH_COLOR = '#ffd27a';
+
+function makeSolo(name) {
+  const d = S.data;
+  const idx = d.topIndex.get(name);
+  const top = idx !== undefined;
+  const color = top ? topColors[idx] : new THREE.Color(SEARCH_COLOR);
+  return {
+    name,
+    index: top ? idx : -1,
+    color,
+    css: top ? PALETTE[idx] : SEARCH_COLOR,
+    ms: d.artists.find((a) => a.name === name)?.ms ?? 0,
+    minutes: top ? d.perArtist.subarray(idx * d.N, (idx + 1) * d.N) : artistMinutes(d, name),
+  };
+}
+
+function wireFind() {
+  const input = $('#findArtist');
+  const list = $('#findList');
+  let matches = [];
+  const close = () => { list.innerHTML = ''; list.classList.remove('open'); };
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) return close();
+    matches = S.data.artists.filter((a) => a.name.toLowerCase().includes(q)).slice(0, 6);
+    list.innerHTML = matches.length
+      ? matches.map((a, i) => `<button data-i="${i}"><span>${esc(a.name)}</span><small>${fmtDur(a.ms)}</small></button>`).join('')
+      : '<div class="none">Nobody by that name this year</div>';
+    list.classList.add('open');
+    for (const b of list.querySelectorAll('button')) b.addEventListener('click', () => setSolo(matches[b.dataset.i].name));
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && matches.length && input.value.trim()) setSolo(matches[0].name);
+    if (e.key === 'Escape') { input.value = ''; close(); input.blur(); }
+  });
+  input.addEventListener('blur', () => setTimeout(close, 150));
+}
+
+function setSolo(name) {
+  S.solo = name ? makeSolo(name) : null;
   applyTargets(false);
   renderLegend();
   renderNeedleCard();
@@ -929,17 +980,56 @@ function flyHome() {
   S.camTween = { from: camera.position.clone(), to: homePosition(), fromT: controls.target.clone(), toT: homeTarget(), t: 0, dur: 1.4 };
 }
 
+function setLoading(text) {
+  $('#loading').classList.toggle('show', !!text);
+  if (text) $('#loadingText').textContent = text;
+}
+
+function parseInWorker(files) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker(new URL('./parse.worker.js', import.meta.url), { type: 'module' });
+    w.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'progress') {
+        setLoading(m.total > 1 ? `Reading file ${m.done} of ${m.total}` : 'Reading your files');
+        return;
+      }
+      w.terminate();
+      if (m.type === 'done') resolve(m.records);
+      else reject(new Error(m.message));
+    };
+    w.onerror = (e) => {
+      w.terminate();
+      reject(e);
+    };
+    w.postMessage(files);
+  });
+}
+
 async function loadFiles(files) {
   if (!files?.length) return;
-  toast('Reading your listening history...');
-  const records = await readFiles([...files]);
-  if (!records.length) {
-    toast("Couldn't find any streaming history in that. Try the zip Spotify sent you.");
-    return;
+  files = [...files];
+  setLoading('Reading your files');
+  try {
+    let records;
+    try {
+      records = await parseInWorker(files);
+    } catch (err) {
+      console.warn('Worker parse failed, falling back to the main thread', err);
+      records = await readFiles(files);
+    }
+    if (!records.length) {
+      toast("Couldn't find any streaming history in that. Try the zip Spotify sent you.");
+      return;
+    }
+    setLoading(`Pressing ${records.length.toLocaleString()} streams`);
+    await new Promise((r) => setTimeout(r, 30));
+    $('#help').hidden = true;
+    setDataset(records, 'user');
+    toast(`Pressed ${records.length.toLocaleString()} streams onto your record`);
+  } finally {
+    setLoading(null);
   }
-  $('#help').hidden = true;
-  setDataset(records, 'user');
-  toast(`Pressed ${records.length.toLocaleString()} streams onto your record`);
 }
 
 // ---------- input ----------
@@ -957,7 +1047,7 @@ $('#crackleBtn').addEventListener('click', () => {
   S.crackle = !S.crackle;
   if (S.crackle) crackle.wake();
   $('#crackleBtn').classList.toggle('on', S.crackle);
-  $('#crackleBtn').title = `Vinyl crackle (${S.crackle ? 'on' : 'off'})`;
+  $('#crackleBtn').title = `Sound: crackle and scratch (${S.crackle ? 'on' : 'off'})`;
 });
 $('#viewBtn').addEventListener('click', flyHome);
 $('#loadBtn').addEventListener('click', () => $('#file').click());
@@ -979,6 +1069,11 @@ $('#sBusiest').addEventListener('click', () => {
 });
 addEventListener('keydown', (e) => {
   if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); setPlaying(!S.playing); }
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target === document.body && S.data) {
+    const step = e.key === 'ArrowRight' ? 1 : -1;
+    const from = S.needleDay < 0 ? (step > 0 ? -1 : S.data.days) : S.needleDay;
+    seekToDay((from + step + S.data.days) % S.data.days);
+  }
   if (e.key === 'Escape') { $('#help').hidden = true; $('#notes').hidden = true; }
 });
 
@@ -1005,6 +1100,69 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerleave', () => { mouse.inside = false; setHover(-1); });
 canvas.addEventListener('pointerdown', (e) => { mouse.down = { x: e.clientX, y: e.clientY }; mouse.dragging = false; });
+
+// ---------- scratching ----------
+// Left-drag on the record grabs it and spins it by hand. Drag anywhere else
+// (or right-drag) to orbit the camera.
+
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const groundHit = new THREE.Vector3();
+const scratch = { armed: false, active: false, last: 0, vel: 0, lastT: 0 };
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+
+function pointerOnRecord(x, y) {
+  raycaster.setFromCamera(new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1), camera);
+  if (!raycaster.ray.intersectPlane(groundPlane, groundHit)) return null;
+  const r = Math.hypot(groundHit.x, groundHit.z);
+  return r < VINYL_R + 0.4 ? Math.atan2(groundHit.x, -groundHit.z) : null;
+}
+
+// Capture phase so this runs before OrbitControls sees the press.
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  const a = pointerOnRecord(e.clientX, e.clientY);
+  if (a === null) return;
+  Object.assign(scratch, { armed: true, active: false, last: a, vel: 0, lastT: performance.now() });
+  controls.enabled = false;
+}, { capture: true });
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!scratch.armed || !mouse.dragging) return;
+  if (!scratch.active) {
+    scratch.active = true;
+    S.seek = null;
+    setHover(-1);
+    canvas.classList.add('grabbing');
+    if (hintShown) { hintShown = false; $('#hint').classList.add('gone'); }
+  }
+  const a = pointerOnRecord(e.clientX, e.clientY);
+  if (a === null) return;
+  let delta = a - scratch.last;
+  if (delta > Math.PI) delta -= TAU;
+  if (delta < -Math.PI) delta += TAU;
+  scratch.last = a;
+  S.rho -= delta;
+  const now = performance.now();
+  const dts = Math.max(0.008, (now - scratch.lastT) / 1000);
+  scratch.lastT = now;
+  scratch.vel += (-delta / dts - scratch.vel) * 0.5;
+});
+
+function endScratch() {
+  if (!scratch.armed) return;
+  controls.enabled = true;
+  if (scratch.active) {
+    // let go with a flick and the record keeps that spin before the motor takes over
+    S.omega = THREE.MathUtils.clamp(-scratch.vel, -6, 6);
+    canvas.classList.remove('grabbing');
+  }
+  scratch.armed = false;
+  scratch.active = false;
+  scratch.vel = 0;
+}
+addEventListener('pointerup', endScratch);
+addEventListener('pointercancel', endScratch);
+
 canvas.addEventListener('pointerup', (e) => {
   if (mouse.down && !mouse.dragging && e.button === 0) {
     if (S.hover >= 0) selectCell(S.hover);
@@ -1095,6 +1253,9 @@ function frame() {
     sk.t = Math.min(1, sk.t + dt / sk.dur);
     S.rho = sk.from + (sk.to - sk.from) * ease(sk.t);
     if (sk.t >= 1) S.seek = null;
+  } else if (scratch.active) {
+    S.omega = 0;
+    if (performance.now() - scratch.lastT > 60) scratch.vel *= Math.exp(-dt * 12);
   } else {
     S.rho -= S.omega * dt;
   }
@@ -1105,8 +1266,13 @@ function frame() {
   armLift += (lift - armLift) * (1 - Math.exp(-dt * 5));
   arm.rotation.z = armTilt + armLift;
 
-  if (S.crackle) crackle.setLevel(0.55 * Math.min(1, S.omega / RPM[33]) * (armLift < 0.01 ? 1 : 0));
-  else crackle.setLevel(0);
+  if (S.crackle) {
+    crackle.setLevel(0.55 * Math.min(1, Math.abs(S.omega) / RPM[33]) * (armLift < 0.01 ? 1 : 0));
+    crackle.setScratch(scratch.active ? Math.abs(scratch.vel) : 0);
+  } else {
+    crackle.setLevel(0);
+    crackle.setScratch(0);
+  }
 
   updateBars(dt);
 
@@ -1137,6 +1303,8 @@ function frame() {
 // handy for poking at it from the console
 window.spinback = {
   S, seekToDay, setSolo, selectCell,
+  cam: () => camera.position.toArray().map((v) => +v.toFixed(2)),
+  stats: () => ({ targets: target.filter((v) => v > 0).length, visible: cur.filter((v) => v > 0.003).length, time: S.time }),
   skipIntro() {
     S.camTween = null;
     camera.position.copy(homePosition());

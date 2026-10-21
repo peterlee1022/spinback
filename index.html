@@ -48,7 +48,7 @@
         <button data-rpm="33" class="on">33</button><button data-rpm="45">45</button><button data-rpm="78">78</button>
         <span>rpm</span>
       </div>
-      <button id="crackleBtn" class="round" title="Vinyl crackle (off)">
+      <button id="crackleBtn" class="round" title="Sound: crackle and scratch (off)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor" stroke="none"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="mute" d="m16 9 5 6m0-6-5 6"/></svg>
       </button>
       <button id="viewBtn" class="round" title="Reset the camera">
@@ -65,7 +65,7 @@
       <button id="helpBtn" class="round" title="How to get your Spotify data">?</button>
     </nav>
 
-    <div class="hint" id="hint">drag to orbit &middot; scroll to zoom &middot; click a bar to drop the needle there</div>
+    <div class="hint" id="hint">drag the record to scratch &middot; drag around it or right-drag to orbit &middot; click a bar to drop the needle</div>
 
     <div class="tooltip" id="tooltip"></div>
     <div class="toast" id="toast"></div>
@@ -75,6 +75,14 @@
         <div class="drop-disc"></div>
         <b>Drop your Spotify export</b>
         <span>the .zip from Spotify, or the StreamingHistory .json files inside it</span>
+      </div>
+    </div>
+
+    <div class="drop" id="loading">
+      <div class="drop-inner plain">
+        <div class="drop-disc"></div>
+        <b>Pressing your record</b>
+        <span id="loadingText">Reading your files</span>
       </div>
     </div>
 
