@@ -41,18 +41,18 @@ const canvas = $('#scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
-const BG = new THREE.Color('#0b0b13');
+const BG = new THREE.Color('#0c0c0e');
 scene.background = BG;
-scene.fog = new THREE.Fog(BG, 70, 150);
+scene.fog = new THREE.Fog(BG, 60, 130);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.4;
+scene.environmentIntensity = 0.5;
 
 const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.1, 400);
 const controls = new OrbitControls(camera, canvas);
@@ -60,16 +60,16 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.07;
 controls.target.copy(homeTarget());
 controls.minDistance = 12;
-controls.maxDistance = 90;
+controls.maxDistance = 130;
 controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
 controls.rotateSpeed = 0.6;
 
 function homeTarget() {
-  return innerWidth / innerHeight < 0.8 ? new THREE.Vector3(1.5, -1, 2) : new THREE.Vector3(2, -1.5, 3.5);
+  return innerWidth / innerHeight < 0.8 ? new THREE.Vector3(0, -1, 2) : new THREE.Vector3(0.8, -1.5, 3.5);
 }
 function homePosition() {
   const aspect = innerWidth / innerHeight;
-  const far = aspect < 0.6 ? 2.6 : aspect < 0.8 ? 1.9 : aspect < 1.3 ? 1.45 : 1;
+  const far = aspect < 0.6 ? 2.75 : aspect < 0.8 ? 1.9 : aspect < 1.3 ? 1.45 : 1;
   const offset = aspect < 0.8 ? new THREE.Vector3(-2, 30, 24) : new THREE.Vector3(-4, 25, 33);
   return offset.multiplyScalar(far).add(homeTarget());
 }
@@ -77,21 +77,20 @@ camera.position.set(0, 70, 8);
 
 // ---------- lights ----------
 
-scene.add(new THREE.HemisphereLight('#bcc6ff', '#1a1020', 0.7));
-const key = new THREE.DirectionalLight('#fff1e0', 2.4);
+scene.add(new THREE.HemisphereLight('#dfe3ff', '#16120e', 0.55));
+const key = new THREE.DirectionalLight('#fff3e3', 2.6);
 key.position.set(-14, 30, 12);
 key.castShadow = true;
-key.shadow.mapSize.set(2048, 2048);
-Object.assign(key.shadow.camera, { left: -22, right: 26, top: 22, bottom: -22, near: 1, far: 80 });
-key.shadow.bias = -0.0004;
-key.shadow.normalBias = 0.03;
+key.shadow.mapSize.set(4096, 4096);
+Object.assign(key.shadow.camera, { left: -32, right: 40, top: 32, bottom: -30, near: 1, far: 90 });
+key.shadow.bias = -0.0003;
+key.shadow.normalBias = 0.02;
+key.shadow.radius = 3;
 scene.add(key);
-const rimA = new THREE.PointLight('#7a5cff', 220, 90);
-rimA.position.set(6, 14, -32);
-scene.add(rimA);
-const rimB = new THREE.PointLight('#ff6b6b', 300, 80);
-rimB.position.set(-24, 5, 16);
-scene.add(rimB);
+// cool light from behind to pick out the edges of the bars and the plinth
+const rim = new THREE.DirectionalLight('#c8d3ff', 0.55);
+rim.position.set(-6, 9, -30);
+scene.add(rim);
 
 // ---------- helpers ----------
 
@@ -129,13 +128,118 @@ function flatOnDisc(mesh, angle, radius, y = 0.008) {
 
 // ---------- turntable ----------
 
+const PLINTH_TOP = -0.75;
+const FLOOR_Y = -3.35;
 const plinth = new THREE.Mesh(
-  new RoundedBoxGeometry(41, 2.2, 35, 6, 0.9),
-  new THREE.MeshPhysicalMaterial({ color: '#16161f', roughness: 0.5, metalness: 0.15, clearcoat: 0.35, clearcoatRoughness: 0.35 }),
+  new RoundedBoxGeometry(41, 2.2, 35, 4, 0.45),
+  new THREE.MeshStandardMaterial({ color: '#131315', roughness: 0.62, metalness: 0.1 }),
 );
-plinth.position.set(3.5, -0.75 - 1.1, 0);
+plinth.position.set(3.5, PLINTH_TOP - 1.1, 0);
 plinth.receiveShadow = true;
+plinth.castShadow = true;
 scene.add(plinth);
+
+// brushed top plate, inset a little from the edge of the body
+const plateMat = new THREE.MeshStandardMaterial({ color: '#1b1b1e', roughness: 0.55, metalness: 0.3 });
+{
+  const plate = new THREE.Mesh(new RoundedBoxGeometry(40, 0.14, 34, 2, 0.06), plateMat);
+  plate.position.set(3.5, PLINTH_TOP + 0.04, 0);
+  plate.receiveShadow = true;
+  scene.add(plate);
+  const footMat = new THREE.MeshStandardMaterial({ color: '#1b1b1e', roughness: 0.5, metalness: 0.6 });
+  for (const [x, z] of [[-14.5, 14.5], [21.5, 14.5], [-14.5, -14.5], [21.5, -14.5]]) {
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.7, 0.42, 40), footMat);
+    foot.position.set(x, PLINTH_TOP - 2.2 - 0.2, z);
+    foot.castShadow = true;
+    scene.add(foot);
+  }
+}
+
+// floor with a soft pool of light and a contact shadow under the deck
+{
+  const pool = document.createElement('canvas');
+  pool.width = pool.height = 512;
+  const g = pool.getContext('2d');
+  const grad = g.createRadialGradient(256, 256, 0, 256, 256, 256);
+  grad.addColorStop(0, '#2a2a2e');
+  grad.addColorStop(0.45, '#17171a');
+  grad.addColorStop(1, '#0c0c0e');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 512, 512);
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(260, 260),
+    new THREE.MeshStandardMaterial({ map: canvasTexture(pool), roughness: 0.95, metalness: 0 }),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(3.5, FLOOR_Y, 0);
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  const ao = document.createElement('canvas');
+  ao.width = ao.height = 256;
+  const a = ao.getContext('2d');
+  a.filter = 'blur(18px)';
+  a.fillStyle = 'rgba(0,0,0,0.85)';
+  a.fillRect(40, 40, 176, 176);
+  const contact = new THREE.Mesh(
+    new THREE.PlaneGeometry(56, 50),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ao), transparent: true, depthWrite: false }),
+  );
+  contact.rotation.x = -Math.PI / 2;
+  contact.position.set(3.5, FLOOR_Y + 0.01, 0);
+  scene.add(contact);
+}
+
+// Hardware on the deck. These work: start/stop toggles play, the speed buttons set rpm.
+const deckButtons = [];
+const speedLights = {};
+{
+  const btnMat = new THREE.MeshStandardMaterial({ color: '#2b2b30', roughness: 0.35, metalness: 0.7 });
+  // the cap label is part of the button so it dips with the press
+  const add = (w, d, x, z, action, text, fontPx) => {
+    const b = new THREE.Mesh(new RoundedBoxGeometry(w, 0.36, d, 2, 0.08), btnMat);
+    b.position.set(x, PLINTH_TOP + 0.2, z);
+    b.castShadow = true;
+    b.userData = { action, restY: b.position.y, press: 0 };
+    const t = textMesh(text, w * 0.86, w * 0.86 * 0.25, { font: `500 ${fontPx}px Inter, system-ui`, color: 'rgba(255,255,255,0.5)' });
+    t.rotation.x = -Math.PI / 2;
+    t.position.y = 0.185;
+    b.add(t);
+    scene.add(b);
+    deckButtons.push(b);
+    return b;
+  };
+  add(3.4, 1.7, -9.4, 15.3, 'play', 'START \u00b7 STOP', 44);
+  [33, 45, 78].forEach((rpm, i) => {
+    const x = -5.4 + i * 1.75;
+    add(1.4, 1.0, x, 15.6, rpm, String(rpm), 84);
+    const led = new THREE.Mesh(new THREE.CircleGeometry(0.11, 16), new THREE.MeshBasicMaterial({ color: '#3a2a22' }));
+    led.rotation.x = -Math.PI / 2;
+    led.position.set(x, PLINTH_TOP + 0.12, 16.55);
+    scene.add(led);
+    speedLights[rpm] = led;
+  });
+  // pitch fader on the right, just for looks
+  const track = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.05, 9), new THREE.MeshStandardMaterial({ color: '#0b0b0c', roughness: 0.8 }));
+  track.position.set(20.8, PLINTH_TOP + 0.13, 8.5);
+  scene.add(track);
+  const knob = new THREE.Mesh(new RoundedBoxGeometry(1.5, 0.5, 0.8, 2, 0.1), btnMat);
+  knob.position.set(20.8, PLINTH_TOP + 0.35, 8.5);
+  knob.castShadow = true;
+  scene.add(knob);
+  for (let k = -4; k <= 4; k++) {
+    const tick = new THREE.Mesh(new THREE.PlaneGeometry(k === 0 ? 0.7 : 0.4, 0.04), new THREE.MeshBasicMaterial({ color: '#55555c' }));
+    tick.rotation.x = -Math.PI / 2;
+    tick.position.set(21.75 + (k === 0 ? 0.15 : 0), PLINTH_TOP + 0.12, 8.5 + k);
+    scene.add(tick);
+  }
+}
+
+function syncDeckLights() {
+  for (const [rpm, led] of Object.entries(speedLights)) {
+    led.material.color.set(Number(rpm) === S.rpm ? new THREE.Color(3, 1.1, 0.5) : new THREE.Color('#3a2a22'));
+  }
+}
 
 const disc = new THREE.Group();
 scene.add(disc);
@@ -225,7 +329,7 @@ disc.add(marks);
 
 // ---------- tonearm ----------
 
-const chrome = new THREE.MeshStandardMaterial({ color: '#d7dae4', metalness: 1, roughness: 0.18 });
+const chrome = new THREE.MeshStandardMaterial({ color: '#c9ccd4', metalness: 1, roughness: 0.28 });
 const darkMetal = new THREE.MeshStandardMaterial({ color: '#2b2c36', metalness: 0.7, roughness: 0.35 });
 const needlePos = new THREE.Vector3(NEEDLE_R * Math.sin(NEEDLE_ANGLE), 0, -NEEDLE_R * Math.cos(NEEDLE_ANGLE));
 const pivotPos = new THREE.Vector3(19.6, 1.35, -11.8);
@@ -292,7 +396,16 @@ let armLift = 0;
 
 const barGeo = new THREE.BoxGeometry(1, 1, 1);
 barGeo.translate(0, 0.5, 0);
-const bars = new THREE.InstancedMesh(barGeo, new THREE.MeshStandardMaterial({ roughness: 0.36, metalness: 0.02 }), MAX_CELLS);
+const barMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 });
+barMat.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying float vBarH;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBarH = position.y * instanceMatrix[1][1];');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying float vBarH;')
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(0.38, 1.0, smoothstep(0.0, 0.7, vBarH));');
+};
+const bars = new THREE.InstancedMesh(barGeo, barMat, MAX_CELLS);
 bars.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 bars.castShadow = true;
 bars.receiveShadow = true;
@@ -320,40 +433,12 @@ const SZ = RING * 0.74;
 const topColors = PALETTE.map((c) => new THREE.Color(c));
 const otherColor = new THREE.Color(OTHER_COLOR);
 
-// ---------- dust ----------
-
-const dust = (() => {
-  const n = 450;
-  const pos = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    pos[i * 3] = (Math.random() - 0.5) * 80;
-    pos[i * 3 + 1] = Math.random() * 26 - 2;
-    pos[i * 3 + 2] = (Math.random() - 0.5) * 80;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.35, 'rgba(255,255,255,0.35)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
-  const pts = new THREE.Points(geo, new THREE.PointsMaterial({
-    color: '#a9a4ff', map: new THREE.CanvasTexture(c), size: 0.3, transparent: true, opacity: 0.5,
-    depthWrite: false, blending: THREE.AdditiveBlending,
-  }));
-  scene.add(pts);
-  return pts;
-})();
-
 // ---------- post ----------
 
-const composer = new EffectComposer(renderer);
+// Multisampled target so the bars keep clean edges through the bloom pass.
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.55, 0.85);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.5, 0.92);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -482,8 +567,8 @@ function drawLabel(data) {
 
 const toStops = (list) => list.map(([x, c]) => [x, new THREE.Color(c)]);
 const RAMPS = {
-  hour: toStops([[0, '#4f5bd5'], [5, '#8d7bff'], [8, '#ffb547'], [13, '#c6f35b'], [17, '#3ee6b0'], [20, '#ff6ad5'], [24, '#4f5bd5']]),
-  heat: toStops([[0, '#2c2f6b'], [0.3, '#8d3bff'], [0.6, '#ff4f7a'], [0.85, '#ffb547'], [1, '#fff2c4']]),
+  hour: toStops([[0, '#3a4682'], [5, '#7767b3'], [8, '#e9a04c'], [13, '#e4d08c'], [17, '#5fb1a0'], [20, '#d46f90'], [24, '#3a4682']]),
+  heat: toStops([[0, '#272a3e'], [0.3, '#5d4290'], [0.6, '#c4536b'], [0.85, '#e99c4c'], [1, '#f3e4b8']]),
 };
 const RAMP_LABELS = { hour: ['12a', '6a', '12p', '6p', '12a'], heat: ['1 min', '30 min', 'full hour'] };
 const tmpColor = new THREE.Color();
@@ -708,7 +793,7 @@ function renderLegend() {
   const d = S.data;
   const topMs = d.top.reduce((s, a) => s + a.ms, 0);
   const mode = S.colorMode;
-  el.innerHTML = `<div class="mode"><span>Color by</span><div class="seg">${['artist', 'hour', 'heat']
+  el.innerHTML = `<div class="mode"><span>Color</span><div class="seg">${['artist', 'hour', 'heat']
     .map((m) => `<button data-mode="${m}" class="${m === mode ? 'on' : ''}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>
     ${mode === 'artist' ? '' : `<div class="ramp"><i style="background:${rampCss(mode)}"></i><div>${RAMP_LABELS[mode].map((l) => `<span>${l}</span>`).join('')}</div></div>`}
     <h3><span>Top artists</span><button id="soloClear">show all</button></h3>`;
@@ -914,7 +999,7 @@ function setColorMode(mode) {
   renderNeedleCard();
 }
 
-const SEARCH_COLOR = '#ffd27a';
+const SEARCH_COLOR = '#d8c48a';
 
 function makeSolo(name) {
   const d = S.data;
@@ -1035,13 +1120,23 @@ async function loadFiles(files) {
 // ---------- input ----------
 
 $('#playBtn').addEventListener('click', () => setPlaying(!S.playing));
-for (const b of document.querySelectorAll('#rpm button')) {
-  b.addEventListener('click', () => {
-    S.rpm = Number(b.dataset.rpm);
-    savePrefs();
-    for (const o of document.querySelectorAll('#rpm button')) o.classList.toggle('on', o === b);
-    if (!S.playing) setPlaying(true);
-  });
+function setRpm(rpm, start = true) {
+  S.rpm = rpm;
+  savePrefs();
+  for (const o of document.querySelectorAll('#rpm button')) o.classList.toggle('on', Number(o.dataset.rpm) === rpm);
+  syncDeckLights();
+  if (start && !S.playing) setPlaying(true);
+}
+for (const b of document.querySelectorAll('#rpm button')) b.addEventListener('click', () => setRpm(Number(b.dataset.rpm)));
+
+function pickDeckButton() {
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.intersectObjects(deckButtons, false)[0]?.object ?? null;
+}
+function pressDeckButton(b) {
+  b.userData.press = 1;
+  if (b.userData.action === 'play') setPlaying(!S.playing);
+  else setRpm(b.userData.action);
 }
 $('#crackleBtn').addEventListener('click', () => {
   S.crackle = !S.crackle;
@@ -1165,7 +1260,9 @@ addEventListener('pointercancel', endScratch);
 
 canvas.addEventListener('pointerup', (e) => {
   if (mouse.down && !mouse.dragging && e.button === 0) {
-    if (S.hover >= 0) selectCell(S.hover);
+    const deckBtn = S.hover < 0 && pickDeckButton();
+    if (deckBtn) pressDeckButton(deckBtn);
+    else if (S.hover >= 0) selectCell(S.hover);
     else if (S.selected >= 0) { const p = S.selected; S.selected = -1; paint(p); renderNeedleCard(); }
   }
   mouse.down = null;
@@ -1276,12 +1373,22 @@ function frame() {
 
   updateBars(dt);
 
-  if (mouse.inside && !mouse.down && (frameNo % 2 === 0)) setHover(pick());
+  if (mouse.inside && !mouse.down && (frameNo % 2 === 0)) {
+    const i = pick();
+    setHover(i);
+    if (i < 0) canvas.classList.toggle('pointing', !!pickDeckButton());
+  }
+  for (const b of deckButtons) {
+    b.userData.press *= Math.exp(-dt * 7);
+    b.position.y = b.userData.restY - 0.14 * b.userData.press;
+  }
 
-  dust.rotation.y += dt * 0.01;
-  dust.position.y = Math.sin(S.time * 0.2) * 0.4;
 
   controls.update(dt);
+  // keep the fog the same depth into the scene however far out the camera is
+  const camDist = camera.position.distanceTo(controls.target);
+  scene.fog.near = camDist + 15;
+  scene.fog.far = camDist + 90;
   composer.render();
 }
 
@@ -1289,10 +1396,7 @@ function frame() {
 
 (async () => {
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
-  if (RPM[prefs.rpm]) {
-    S.rpm = prefs.rpm;
-    for (const o of document.querySelectorAll('#rpm button')) o.classList.toggle('on', Number(o.dataset.rpm) === S.rpm);
-  }
+  setRpm(RPM[prefs.rpm] ? prefs.rpm : 33, false);
   if (['artist', 'hour', 'heat'].includes(prefs.colorMode)) S.colorMode = prefs.colorMode;
   setDataset(demoRecords(), 'demo');
   S.camTween = { from: camera.position.clone(), to: homePosition(), t: 0, dur: 2.6 };
