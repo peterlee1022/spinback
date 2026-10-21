@@ -14,9 +14,9 @@
     <canvas id="scene"></canvas>
     <div class="vignette"></div>
 
-    <header class="brand panel-free">
-      <div class="logo"><span class="logo-disc"></span>spinback</div>
-      <div class="tag" id="sourceTag">Demo listener</div>
+    <header class="brand">
+      <div class="logo"><span class="mark"></span>spinback</div>
+      <div class="tag" id="sourceTag">&nbsp;</div>
       <div class="years" id="years"></div>
     </header>
 
@@ -27,42 +27,49 @@
       <button class="stat link" id="sBusiest" title="Drop the needle on your busiest day"><b>-</b><span>busiest day</span></button>
     </section>
 
-    <aside class="needle panel" id="needle">
-      <div class="eyebrow"><span class="led"></span>Under the needle<span class="solo-badge" id="soloBadge"></span></div>
-      <div class="n-date" id="nDate">&nbsp;</div>
-      <div class="n-big" id="nBig">&nbsp;</div>
-      <div class="n-line" id="nArtist">&nbsp;</div>
-      <div class="n-line dim" id="nTrack">&nbsp;</div>
-      <div class="n-hours" id="nHours"></div>
-      <div class="n-axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>
-    </aside>
-
     <section class="legend panel" id="legend"></section>
 
-    <nav class="deck panel">
-      <button id="playBtn" class="round big" title="Pause the record">
-        <svg class="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
-        <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
-      </button>
-      <div class="rpm" id="rpm" title="Spin speed">
-        <button data-rpm="33" class="on">33</button><button data-rpm="45">45</button><button data-rpm="78">78</button>
-        <span>rpm</span>
+    <aside class="player panel" id="needle">
+      <div class="transport">
+        <button id="playBtn" class="play" title="Pause the record">
+          <svg class="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.5" height="14" rx="0.8"/><rect x="14" y="5" width="3.5" height="14" rx="0.8"/></svg>
+          <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.6v12.8a.9.9 0 0 0 1.4.75l9.9-6.4a.9.9 0 0 0 0-1.5L9.4 4.85A.9.9 0 0 0 8 5.6z"/></svg>
+        </button>
+        <div class="rpm" id="rpm" title="Spin speed">
+          <button data-rpm="33" class="on">33</button><button data-rpm="45">45</button><button data-rpm="78">78</button>
+          <span>rpm</span>
+        </div>
+        <button id="crackleBtn" class="icon" title="Sound: crackle and scratch (off)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="mute" d="m16 9.5 5 5m0-5-5 5"/></svg>
+        </button>
       </div>
-      <button id="crackleBtn" class="round" title="Sound: crackle and scratch (off)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor" stroke="none"/><path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/><path class="mute" d="m16 9 5 6m0-6-5 6"/></svg>
+      <div class="readout">
+        <div class="eyebrow"><span class="led"></span><span>Under the needle</span><span class="solo-badge" id="soloBadge"></span></div>
+        <div class="n-date" id="nDate">&nbsp;</div>
+        <div class="n-big" id="nBig">&nbsp;</div>
+        <div class="n-line" id="nArtist">&nbsp;</div>
+        <div class="n-line dim" id="nTrack">&nbsp;</div>
+        <div class="n-hours" id="nHours"></div>
+        <div class="n-axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>
+      </div>
+    </aside>
+
+    <nav class="tools">
+      <button id="notesBtn" title="Liner notes: your year in a few facts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+        <span>Liner notes</span>
       </button>
-      <button id="viewBtn" class="round" title="Reset the camera">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      <button id="snapBtn" title="Save the record as a PNG">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span>Snapshot</span>
       </button>
-      <button id="snapBtn" class="round" title="Save a snapshot of the record">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-      </button>
-      <button id="notesBtn" class="round" title="Liner notes: your year in a few facts">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+      <button id="viewBtn" title="Reset the camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+        <span>Reset view</span>
       </button>
       <span class="sep"></span>
-      <button id="loadBtn" class="pill accent"><span class="long">Press your own record</span><span class="short">Load data</span></button>
-      <button id="helpBtn" class="round" title="How to get your Spotify data">?</button>
+      <button id="loadBtn" class="primary">Load your data</button>
+      <button id="helpBtn" class="icon" title="How to get your Spotify data">?</button>
     </nav>
 
     <div class="hint" id="hint">drag the record to scratch &middot; drag around it or right-drag to orbit &middot; click a bar to drop the needle</div>
@@ -72,7 +79,7 @@
 
     <div class="drop" id="drop">
       <div class="drop-inner">
-        <div class="drop-disc"></div>
+        <div class="drop-disc still"></div>
         <b>Drop your Spotify export</b>
         <span>the .zip from Spotify, or the StreamingHistory .json files inside it</span>
       </div>
@@ -88,7 +95,7 @@
 
     <div class="modal" id="help" hidden>
       <div class="modal-card panel">
-        <button class="close round" id="helpClose" title="Close">&times;</button>
+        <button class="close icon" id="helpClose" title="Close">&times;</button>
         <h2>Press your own record</h2>
         <ol>
           <li>Open your <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noopener">Spotify privacy settings</a> and scroll to <em>Download your data</em>.</li>
@@ -96,17 +103,19 @@
           <li>When the email shows up, download the zip and drop it anywhere on this page. No need to unzip it.</li>
         </ol>
         <p class="fine">Your files never leave this tab. Everything is parsed locally in your browser, nothing gets uploaded.</p>
-        <button class="pill accent" id="helpLoad">Choose files</button>
+        <button class="primary" id="helpLoad">Choose files</button>
       </div>
     </div>
 
     <div class="modal" id="notes" hidden>
       <div class="modal-card panel notes-card">
-        <button class="close round" id="notesClose" title="Close">&times;</button>
-        <div class="eyebrow">Liner notes</div>
-        <h2 id="notesTitle"></h2>
+        <button class="close icon" id="notesClose" title="Close">&times;</button>
+        <div class="notes-head">
+          <span>Liner notes</span>
+          <h2 id="notesTitle"></h2>
+        </div>
         <div class="notes-grid" id="notesGrid"></div>
-        <button class="pill accent" id="notesSnap">Save a snapshot</button>
+        <button class="primary" id="notesSnap">Save a snapshot</button>
       </div>
     </div>
 

@@ -1,8 +1,8 @@
 import { unzipSync, strFromU8 } from 'fflate';
 
 export const TOP_N = 8;
-export const PALETTE = ['#ff6b6b', '#ffb547', '#c6f35b', '#3ee6b0', '#4cc9ff', '#8d7bff', '#ff6ad5', '#e9e4ff'];
-export const OTHER_COLOR = '#41455f';
+export const PALETTE = ['#e8604c', '#e9b04f', '#a9c98f', '#3fa59c', '#6f93d8', '#a68bd8', '#e290b1', '#e6dccb'];
+export const OTHER_COLOR = '#3b3c45';
 
 // ---------- reading Spotify exports ----------
 
