@@ -628,6 +628,7 @@ const RAMPS = {
   hour: toStops([[0, '#3a4682'], [5, '#7767b3'], [8, '#e9a04c'], [13, '#e4d08c'], [17, '#5fb1a0'], [20, '#d46f90'], [24, '#3a4682']]),
   heat: toStops([[0, '#272a3e'], [0.3, '#5d4290'], [0.6, '#c4536b'], [0.85, '#e99c4c'], [1, '#f3e4b8']]),
 };
+const MODE_NAMES = { artist: 'Artist', hour: 'Time', heat: 'Minutes' };
 const RAMP_LABELS = { hour: ['12a', '6a', '12p', '6p', '12a'], heat: ['1 min', '30 min', 'full hour'] };
 const tmpColor = new THREE.Color();
 
@@ -891,7 +892,6 @@ function renderStats() {
   $('#sHours').textContent = Math.round(d.totalMs / 3.6e6).toLocaleString();
   $('#sPlays').textContent = d.plays.toLocaleString();
   $('#sArtists').textContent = d.artistCount.toLocaleString();
-  $('#sBusiest b').textContent = d.dayMs[d.busiestDay] > 0 ? dateOf(d.busiestDay).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -901,8 +901,8 @@ function renderLegend() {
   const d = S.data;
   const topMs = d.top.reduce((s, a) => s + a.ms, 0);
   const mode = S.colorMode;
-  el.innerHTML = `<div class="mode"><span>Color</span><div class="seg">${['artist', 'hour', 'heat']
-    .map((m) => `<button data-mode="${m}" class="${m === mode ? 'on' : ''}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>
+  el.innerHTML = `<div class="mode"><span>Color</span><div class="seg">${Object.entries(MODE_NAMES)
+    .map(([m, name]) => `<button data-mode="${m}" class="${m === mode ? 'on' : ''}">${name}</button>`).join('')}</div></div>
     ${mode === 'artist' ? '' : `<div class="ramp"><i style="background:${rampCss(mode)}"></i><div>${RAMP_LABELS[mode].map((l) => `<span>${l}</span>`).join('')}</div></div>`}
     <h3><span>Top artists</span><button id="soloClear">show all</button></h3>`;
   for (const b of el.querySelectorAll('.seg button')) b.addEventListener('click', () => setColorMode(b.dataset.mode));
@@ -1029,6 +1029,9 @@ function renderNotes() {
   const items = [];
   if (n.topTrack) items.push(['Song of the year', n.topTrack.track, `${esc(n.topTrack.artist)} &middot; ${n.topTrack.plays.toLocaleString()} plays`, colorOfArtist(n.topTrack.artist)]);
   if (n.loop) items.push(['On loop', n.loop.track, `${n.loop.plays} plays on ${day(n.loop.day)}`, colorOfArtist(n.loop.artist)]);
+  if (S.data.dayMs[S.data.busiestDay] > 0) {
+    items.push(['Busiest day', fmtDay(S.data.busiestDay, true), `${fmtDur(S.data.dayMs[S.data.busiestDay])} &middot; <a class="jump" id="jumpBusiest">drop the needle there</a>`]);
+  }
   if (n.streak.len) items.push(['Longest streak', `${n.streak.len} days`, `${day(n.streak.start)} to ${day(n.streak.start + n.streak.len - 1)}`]);
   items.push(['Night owl', `${Math.round(n.nightShare * 100)}%`, 'of your listening was between midnight and 5am']);
   items.push(['Favorite day', `${n.favDay}s`, `about ${fmtDur(n.favDayMs)} on an average one`]);
@@ -1041,6 +1044,7 @@ function renderNotes() {
       <b>${color ? `<i style="background:${color}"></i>` : ''}${esc(value)}</b>
       <em>${detail}</em>
     </div>`).join('');
+  $('#jumpBusiest')?.addEventListener('click', () => { $('#notes').hidden = true; jumpToBusiestDay(); });
 }
 
 // ---------- snapshot ----------
@@ -1233,11 +1237,11 @@ $('#playBtn').addEventListener('click', () => setPlaying(!S.playing));
 function setRpm(rpm, start = true) {
   S.rpm = rpm;
   savePrefs();
-  for (const o of document.querySelectorAll('#rpm button')) o.classList.toggle('on', Number(o.dataset.rpm) === rpm);
+  $('#rpmBtn b').textContent = rpm;
   syncDeckLights();
   if (start && !S.playing) setPlaying(true);
 }
-for (const b of document.querySelectorAll('#rpm button')) b.addEventListener('click', () => setRpm(Number(b.dataset.rpm)));
+$('#rpmBtn').addEventListener('click', () => setRpm(S.rpm === 33 ? 45 : S.rpm === 45 ? 78 : 33));
 
 function pickDeckButton() {
   raycaster.setFromCamera(pointer, camera);
@@ -1255,23 +1259,21 @@ $('#crackleBtn').addEventListener('click', () => {
   $('#crackleBtn').title = `Sound: crackle and scratch (${S.crackle ? 'on' : 'off'})`;
 });
 $('#viewBtn').addEventListener('click', flyHome);
-$('#loadBtn').addEventListener('click', () => $('#file').click());
-$('#helpBtn').addEventListener('click', () => { $('#help').hidden = false; });
+$('#loadBtn').addEventListener('click', () => { $('#help').hidden = false; });
 $('#notesBtn').addEventListener('click', () => { renderNotes(); $('#notes').hidden = false; });
 $('#notesClose').addEventListener('click', () => { $('#notes').hidden = true; });
 $('#notes').addEventListener('click', (e) => { if (e.target.id === 'notes') $('#notes').hidden = true; });
 $('#notesSnap').addEventListener('click', () => { $('#notes').hidden = true; requestAnimationFrame(snapshot); });
-$('#snapBtn').addEventListener('click', snapshot);
 $('#helpClose').addEventListener('click', () => { $('#help').hidden = true; });
 $('#helpLoad').addEventListener('click', () => $('#file').click());
 $('#help').addEventListener('click', (e) => { if (e.target.id === 'help') $('#help').hidden = true; });
 $('#file').addEventListener('change', (e) => { loadFiles(e.target.files); e.target.value = ''; });
-$('#sBusiest').addEventListener('click', () => {
+function jumpToBusiestDay() {
   const d = S.data.busiestDay;
   let best = d * 24;
   for (let h = 0; h < 24; h++) if (S.data.minutes[d * 24 + h] > S.data.minutes[best]) best = d * 24 + h;
   selectCell(best);
-});
+}
 addEventListener('keydown', (e) => {
   if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); setPlaying(!S.playing); }
   if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target === document.body && S.data) {
@@ -1378,6 +1380,14 @@ canvas.addEventListener('pointerup', (e) => {
   mouse.down = null;
   mouse.dragging = false;
 });
+// "Reset view" only shows once you've actually moved the camera yourself.
+function updateViewBtn() {
+  const away = !S.camTween && !controls.autoRotate
+    && (camera.position.distanceTo(homePosition()) > 3 || controls.target.distanceTo(homeTarget()) > 1);
+  if ($('#viewBtn').hidden === away) $('#viewBtn').hidden = !away;
+}
+controls.addEventListener('change', updateViewBtn);
+
 let hintShown = true;
 controls.addEventListener('start', () => {
   if (hintShown) { hintShown = false; $('#hint').classList.add('gone'); }
@@ -1468,12 +1478,16 @@ function frame() {
   // Left alone (say on a second monitor), the camera drifts around the record.
   if (!S.camTween && !reduceMotion && S.time - lastInput > 30) controls.autoRotate = true;
 
+
   if (S.camTween) {
     const tw = S.camTween;
     tw.t = Math.min(1, tw.t + dt / tw.dur);
     camera.position.lerpVectors(tw.from, tw.to, ease(tw.t));
     if (tw.toT) controls.target.lerpVectors(tw.fromT, tw.toT, ease(tw.t));
-    if (tw.t >= 1) S.camTween = null;
+    if (tw.t >= 1) {
+      S.camTween = null;
+      updateViewBtn();
+    }
   }
 
   const want = S.playing && !S.seek ? RPM[S.rpm] : 0;
