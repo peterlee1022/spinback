@@ -87,8 +87,20 @@ function dedupe(records) {
 // ---------- aggregation ----------
 
 const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
-const dayOfYear = (d) =>
-  Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 1)) / 864e5);
+// Whole local days between two dates, ignoring DST shifts.
+const dayDiff = (a, b) =>
+  Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
+
+// A period is what gets pressed onto one record: a calendar year, or the
+// rolling twelve months up to the last play (which is what Spotify's quick
+// "Account data" export covers).
+export function yearPeriod(year) {
+  return { id: String(year), label: String(year), short: String(year), year, start: new Date(year, 0, 1), days: isLeap(year) ? 366 : 365 };
+}
+
+export function dateAt(data, d) {
+  return new Date(data.start.getFullYear(), data.start.getMonth(), data.start.getDate() + d);
+}
 
 export function listYears(records) {
   const m = new Map();
@@ -106,8 +118,44 @@ export function pickYear(years) {
   return years[years.length - 1].year;
 }
 
+export function listPeriods(records) {
+  const periods = listYears(records).map((y) => ({ ...yearPeriod(y.year), ms: y.ms }));
+  if (!records.length) return periods;
+  let first = Infinity;
+  let last = -Infinity;
+  for (const r of records) {
+    if (r.t < first) first = r.t;
+    if (r.t > last) last = r.t;
+  }
+  const end = new Date(last);
+  // Only worth offering when it differs from a calendar year.
+  if (end.getMonth() !== 11 || end.getDate() !== 31) {
+    const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 364);
+    const short = `${String(start.getFullYear()).slice(2)}/${String(end.getFullYear()).slice(2)}`;
+    let ms = 0;
+    for (const r of records) if (r.t >= start.getTime()) ms += r.ms;
+    periods.push({ id: 'last12', label: 'Last 12 months', short, start, days: 365, ms, spanDays: dayDiff(new Date(first), end) });
+  }
+  return periods;
+}
+
+// Short exports (about a year) read best as one rolling record; longer
+// histories default to the most recent full-ish calendar year.
+export function pickPeriod(periods) {
+  const rolling = periods.find((p) => p.id === 'last12');
+  if (rolling && rolling.spanDays <= 400) return rolling;
+  const years = periods.filter((p) => p.id !== 'last12');
+  const year = pickYear(years.map((p) => ({ year: p.year, ms: p.ms })));
+  return years.find((p) => p.year === year);
+}
+
 export function buildYear(records, year) {
-  const days = isLeap(year) ? 366 : 365;
+  return buildPeriod(records, yearPeriod(year));
+}
+
+export function buildPeriod(records, period) {
+  const { days, start } = period;
+  const year = period.year ?? null;
   const N = days * 24;
   const cells = Array.from({ length: N }, () => []);
   const artistTotals = new Map();
@@ -117,8 +165,9 @@ export function buildYear(records, year) {
 
   for (const r of records) {
     const d = new Date(r.t);
-    if (d.getFullYear() !== year) continue;
-    cells[dayOfYear(d) * 24 + d.getHours()].push(r);
+    const day = dayDiff(start, d);
+    if (day < 0 || day >= days) continue;
+    cells[day * 24 + d.getHours()].push(r);
     totalMs += r.ms;
     if (r.ms >= 30000) plays++;
     artistTotals.set(r.artist, (artistTotals.get(r.artist) || 0) + r.ms);
@@ -181,7 +230,8 @@ export function buildYear(records, year) {
   for (let d = 1; d < days; d++) if (dayMs[d] > dayMs[busiestDay]) busiestDay = d;
 
   return {
-    year, days, N, cells, minutes, topOf, perArtist, dayMs, top, topIndex, artists,
+    year, start, label: period.label, short: period.short, periodId: period.id,
+    days, N, cells, minutes, topOf, perArtist, dayMs, top, topIndex, artists,
     totalMs, plays, artistCount: artists.length, trackCount: tracks.size, busiestDay,
   };
 }
@@ -240,7 +290,7 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 
 // Fun facts for the liner notes card.
 export function linerNotes(data) {
-  const { cells, days, year, dayMs, totalMs } = data;
+  const { cells, days, dayMs, totalMs } = data;
   const trackMs = new Map();
   const trackPlays = new Map();
   const weekdayMs = new Float64Array(7);
@@ -251,7 +301,7 @@ export function linerNotes(data) {
   let loop = null;
 
   for (let d = 0; d < days; d++) {
-    const date = new Date(year, 0, 1 + d);
+    const date = dateAt(data, d);
     weekdayMs[date.getDay()] += dayMs[d];
     weekdayCount[date.getDay()]++;
     monthMs[date.getMonth()] += dayMs[d];
@@ -300,7 +350,7 @@ export function linerNotes(data) {
     first: first && {
       track: first.track,
       artist: first.artist,
-      day: Math.floor((Date.UTC(year, firstDate.getMonth(), firstDate.getDate()) - Date.UTC(year, 0, 1)) / 864e5),
+      day: dayDiff(data.start, firstDate),
       time: firstDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
     },
   };

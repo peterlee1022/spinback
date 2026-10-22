@@ -8,7 +8,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
-  readFiles, listYears, pickYear, buildYear, demoRecords, cellTracks, daySummary, linerNotes, artistMinutes,
+  readFiles, listPeriods, pickPeriod, buildPeriod, dateAt, demoRecords, cellTracks, daySummary, linerNotes, artistMinutes,
   PALETTE, OTHER_COLOR, TOP_N,
 } from './data.js';
 import { createCrackle } from './audio.js';
@@ -460,7 +460,7 @@ composer.addPass(new OutputPass());
 
 const S = {
   records: null,
-  years: [],
+  periods: [],
   source: 'demo',
   data: null,
   solo: null,
@@ -504,13 +504,19 @@ function rebuildMarks(data) {
     m.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.map?.dispose(); o.material.dispose(); } });
   }
   const tickMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.22, depthWrite: false });
-  for (let m = 0; m < 12; m++) {
-    const start = Math.round((Date.UTC(data.year, m, 1) - Date.UTC(data.year, 0, 1)) / 864e5);
-    const end = Math.round((Date.UTC(data.year, m + 1, 1) - Date.UTC(data.year, 0, 1)) / 864e5);
-    const name = new Date(data.year, m, 1).toLocaleString('en-US', { month: 'short' }).toUpperCase();
+  // month boundaries, which for a rolling period don't line up with day 0
+  const starts = [0];
+  for (let d = 1; d < data.days; d++) if (dateAt(data, d).getDate() === 1) starts.push(d);
+  starts.push(data.days);
+  for (let k = 0; k < starts.length - 1; k++) {
+    const [start, end] = [starts[k], starts[k + 1]];
+    if (start > 0) {
+      const tick = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.75), tickMat);
+      marks.add(flatOnDisc(tick, angleFor(start / data.days), 13.9));
+    }
+    if (end - start < 10) continue; // a sliver of a month at either end gets no name
+    const name = dateAt(data, start).toLocaleString('en-US', { month: 'short' }).toUpperCase();
     marks.add(flatOnDisc(textMesh(name, 1.5, 0.42), angleFor((start + end) / 2 / data.days), 13.95));
-    const tick = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.75), tickMat);
-    marks.add(flatOnDisc(tick, angleFor(start / data.days), 13.9));
   }
   const hourLabels = [[0, '12AM'], [6, '6AM'], [12, 'NOON'], [18, '6PM'], [23, '11PM']];
   for (const [h, txt] of hourLabels) {
@@ -553,7 +559,7 @@ function drawLabel(data) {
   g.fillText('SPINBACK', c + 9, c - 330);
   g.letterSpacing = '-6px';
   g.font = '700 190px "Space Grotesk", system-ui';
-  g.fillText(String(data.year), c, c - 160);
+  g.fillText(data.short, c, c - 160);
   g.letterSpacing = '6px';
   g.font = '600 34px Inter, system-ui';
   g.fillText('SIDE A', c - 230, c);
@@ -767,7 +773,9 @@ function seekToDay(d) {
 // ---------- HUD ----------
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
-const dateOf = (d) => new Date(S.data.year, 0, 1 + d);
+const dateOf = (d) => dateAt(S.data, d);
+// "2025" or "last 12 months", for reading in a sentence ("your 2025", "in the last 12 months")
+const periodPhrase = (article = false) => (S.data.year ? String(S.data.year) : `${article ? 'the ' : ''}last 12 months`);
 const fmtDay = (d, long = false) => dateOf(d).toLocaleDateString('en-US', long ? { weekday: 'long', month: 'long', day: 'numeric' } : { weekday: 'short', month: 'short', day: 'numeric' });
 const fmtHour = (h) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
 const fmtMin = (m) => (m < 1 ? '<1 min' : `${Math.round(m)} min`);
@@ -810,8 +818,9 @@ function renderNeedleCard() {
   $('#soloBadge').style.color = S.solo?.css ?? '';
   if (d < 0) {
     $('#nDate').textContent = 'Lead-in groove';
-    $('#nBig').textContent = 'New Year';
-    $('#nArtist').innerHTML = `<span>the needle is between Dec 31 and Jan 1</span>`;
+    const short = (d) => dateOf(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    $('#nBig').textContent = S.data.year ? 'New Year' : 'Full circle';
+    $('#nArtist').innerHTML = `<span>the needle is between ${short(S.data.days - 1)} and ${short(0)}</span>`;
     $('#nTrack').innerHTML = '&nbsp;';
     for (const s of hourBars) { s.style.height = '4%'; s.style.background = ''; s.className = 'empty'; }
     return;
@@ -892,7 +901,7 @@ function artistTooltip(a) {
   return `<div class="tt-head">#${a.index + 1} of ${S.data.artistCount.toLocaleString()} artists</div>
     <div class="tt-big" style="color:${a.color}">${esc(a.name)}</div>
     <ol>
-      <li><span><b>${fmtDur(a.ms)}</b><em>listened in ${S.data.year}</em></span></li>
+      <li><span><b>${fmtDur(a.ms)}</b><em>listened in ${periodPhrase(true)}</em></span></li>
       <li><span><b>${a.plays.toLocaleString()} plays</b><em>peaked in ${MONTHS[a.peakMonth]}</em></span></li>
       <li><span><b>${esc(a.topTrack)}</b><em>most played track</em></span></li>
     </ol>
@@ -927,16 +936,16 @@ function hideTooltip() {
   tooltip.classList.remove('show');
 }
 
-function renderYears() {
+function renderPeriods() {
   const el = $('#years');
   el.innerHTML = '';
-  if (S.years.length < 2) return;
-  for (const y of S.years) {
+  if (S.periods.length < 2) return;
+  for (const p of S.periods) {
     const b = document.createElement('button');
-    b.textContent = y.year;
-    b.className = S.data?.year === y.year ? 'on' : '';
-    b.title = `${Math.round(y.ms / 3.6e6)} hours`;
-    b.addEventListener('click', () => loadYear(y.year));
+    b.textContent = p.label;
+    b.className = S.data?.periodId === p.id ? 'on' : '';
+    b.title = `${Math.round(p.ms / 3.6e6).toLocaleString()} hours`;
+    b.addEventListener('click', () => loadPeriod(p));
     el.appendChild(b);
   }
 }
@@ -944,10 +953,10 @@ function renderYears() {
 function renderSource() {
   const tag = $('#sourceTag');
   if (S.source === 'demo') {
-    tag.innerHTML = `A made-up listener's ${S.data.year}. <a id="tagLoad">Press yours</a>`;
+    tag.innerHTML = `A made-up listener's ${periodPhrase()}. <a id="tagLoad">Press yours</a>`;
     $('#tagLoad').addEventListener('click', () => $('#file').click());
   } else {
-    tag.innerHTML = `Your ${S.data.year}, pressed to vinyl. <a id="tagDemo">Back to demo</a>`;
+    tag.innerHTML = `Your ${periodPhrase()}, pressed to vinyl. <a id="tagDemo">Back to demo</a>`;
     $('#tagDemo').addEventListener('click', () => setDataset(demoRecords(), 'demo'));
   }
 }
@@ -984,8 +993,8 @@ function renderNotes() {
   items.push(['Favorite day', `${n.favDay}s`, `about ${fmtDur(n.favDayMs)} on an average one`]);
   if (n.peakMonth >= 0) items.push(['Peak month', MONTHS[n.peakMonth], hrs(n.monthMs[n.peakMonth])]);
   if (n.quietMonth >= 0 && n.quietMonth !== n.peakMonth) items.push(['Quietest month', MONTHS[n.quietMonth], hrs(n.monthMs[n.quietMonth])]);
-  if (n.first) items.push(['First song of the year', n.first.track, `${esc(n.first.artist)} &middot; ${day(n.first.day)}, ${n.first.time}`, colorOfArtist(n.first.artist)]);
-  $('#notesTitle').textContent = `${S.source === 'demo' ? "A made-up listener's" : 'Your'} ${S.data.year}`;
+  if (n.first) items.push([S.data.year ? 'First song of the year' : 'First song on the record', n.first.track, `${esc(n.first.artist)} &middot; ${day(n.first.day)}, ${n.first.time}`, colorOfArtist(n.first.artist)]);
+  $('#notesTitle').textContent = `${S.source === 'demo' ? "A made-up listener's" : 'Your'} ${periodPhrase()}`;
   $('#notesGrid').innerHTML = items.map(([label, value, detail, color]) => `<div class="note">
       <span>${label}</span>
       <b>${color ? `<i style="background:${color}"></i>` : ''}${esc(value)}</b>
@@ -1011,11 +1020,11 @@ function snapshot() {
   g.fillStyle = 'rgba(255,255,255,0.6)';
   g.font = `500 ${18 * k}px Inter, system-ui`;
   const top = d.top[0] ? ` \u00b7 most played: ${d.top[0].name}` : '';
-  g.fillText(`${d.year} \u00b7 ${Math.round(d.totalMs / 3.6e6).toLocaleString()} hours${top}`, 40 * k, c.height - 36 * k);
+  g.fillText(`${d.label} \u00b7 ${Math.round(d.totalMs / 3.6e6).toLocaleString()} hours${top}`, 40 * k, c.height - 36 * k);
   c.toBlob((blob) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `spinback-${d.year}.png`;
+    a.download = `spinback-${d.short.replace('/', '-')}.png`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   });
@@ -1027,22 +1036,24 @@ function snapshot() {
 function setDataset(records, source) {
   S.records = records;
   S.source = source;
-  S.years = listYears(records);
-  loadYear(pickYear(S.years));
+  S.periods = listPeriods(records);
+  loadPeriod(pickPeriod(S.periods));
 }
 
-function loadYear(year) {
-  S.data = buildYear(S.records, year);
+function loadPeriod(period) {
+  S.data = buildPeriod(S.records, period);
   S.solo = null;
   S.hover = -1;
   S.selected = -1;
   pulse.fill(0);
+  pulsing.clear();
+  pulseTouched.clear();
   layout(S.data.days);
   rebuildMarks(S.data);
   drawLabel(S.data);
   renderStats();
   renderLegend();
-  renderYears();
+  renderPeriods();
   renderSource();
   applyTargets(true);
   updateNeedle(true);
@@ -1085,7 +1096,7 @@ function wireFind() {
     matches = S.data.artists.filter((a) => a.name.toLowerCase().includes(q)).slice(0, 6);
     list.innerHTML = matches.length
       ? matches.map((a, i) => `<button data-i="${i}"><span>${esc(a.name)}</span><small>${fmtDur(a.ms)}</small></button>`).join('')
-      : '<div class="none">Nobody by that name this year</div>';
+      : '<div class="none">Nobody by that name on this record</div>';
     list.classList.add('open');
     for (const b of list.querySelectorAll('button')) b.addEventListener('click', () => setSolo(matches[b.dataset.i].name));
   });

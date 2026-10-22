@@ -29,6 +29,8 @@ Every day of the year is a spoke on the disc and every hour is a groove ring, wi
 1. Go to your [Spotify privacy settings](https://www.spotify.com/account/privacy/) and request your data. "Account data" covers the last year and takes about 5 days. "Extended streaming history" covers every year you have streamed and can take up to 30 days.
 2. Drop the zip Spotify emails you onto the page. You can also drop the `StreamingHistory*.json` or `Streaming_History_Audio_*.json` files directly.
 
+The quick "Account data" export covers the last year, which usually spans two calendar years, so it gets pressed as a rolling "Last 12 months" record. You can still switch to each calendar year from the tabs under the title.
+
 Everything is parsed in the browser. Nothing gets uploaded anywhere. Until you load a file, the page shows a made-up listener.
 
 ## Running it

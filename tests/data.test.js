@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { zipSync, strToU8 } from 'fflate';
-import { readFiles, listYears, pickYear, buildYear, linerNotes, artistMinutes, daySummary } from '../src/data.js';
+import { readFiles, listYears, pickYear, buildYear, linerNotes, artistMinutes, daySummary, listPeriods, pickPeriod, buildPeriod, dateAt } from '../src/data.js';
 
 const json = (name, rows) => new File([JSON.stringify(rows)], name, { type: 'application/json' });
 
@@ -110,4 +110,26 @@ test('liner notes find the streak, the song on loop and the first song', () => {
   assert.equal(n.first.track, 'Opener');
   assert.equal(n.topTrack.track, 'Lunch');
   assert.ok(n.nightShare > 0);
+});
+
+test('offers a rolling 12 months that ends on the last play', () => {
+  const records = [rec(at(2025, 10, 3, 9), 'Alpha', 'Early'), rec(at(2026, 9, 21, 20), 'Beta', 'Late')];
+  const periods = listPeriods(records);
+  assert.deepEqual(periods.map((p) => p.id), ['2025', '2026', 'last12']);
+  const rolling = periods.find((p) => p.id === 'last12');
+  assert.equal(rolling.short, '25/26');
+  assert.equal(dateAt({ start: rolling.start }, 364).getDate(), 21);
+  // about a year of history, like Spotify's Account data export, defaults to the rolling view
+  assert.equal(pickPeriod(periods).id, 'last12');
+  const d = buildPeriod(records, rolling);
+  assert.equal(d.days, 365);
+  assert.equal(d.minutes[364 * 24 + 20], 3);
+  assert.equal(d.year, null);
+});
+
+test('long histories default to a calendar year and skip the rolling view when it ends on Dec 31', () => {
+  const records = [rec(at(2020, 2, 1, 9), 'Alpha', 'Old'), rec(at(2024, 11, 31, 20), 'Beta', 'New')];
+  const periods = listPeriods(records);
+  assert.ok(!periods.some((p) => p.id === 'last12'));
+  assert.equal(pickPeriod(periods).id, '2024');
 });
