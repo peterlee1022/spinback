@@ -38,6 +38,20 @@ const heightOf = (min) => (min <= 0 ? 0 : Math.max(0.07, MAX_H * Math.pow(Math.m
 // ---------- renderer / scene ----------
 
 const canvas = $('#scene');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function hasWebGL() {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch {
+    return false;
+  }
+}
+if (!hasWebGL()) {
+  $('#noGL').hidden = false;
+  throw new Error('Spinback needs WebGL');
+}
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -620,6 +634,7 @@ function paint(i) {
   a[i * 3] = base[i * 3] * f;
   a[i * 3 + 1] = base[i * 3 + 1] * f;
   a[i * 3 + 2] = base[i * 3 + 2] * f;
+  bars.instanceColor.addUpdateRange(i * 3, 3);
   bars.instanceColor.needsUpdate = true;
 }
 function paintDay(d) {
@@ -628,6 +643,7 @@ function paintDay(d) {
 }
 function paintAll() {
   for (let i = 0; i < S.data.N; i++) paint(i);
+  bars.instanceColor.clearUpdateRanges();
 }
 
 function applyTargets(intro) {
@@ -638,42 +654,82 @@ function applyTargets(intro) {
     if (intro) {
       cur[i] = 0;
       const d = (i / 24) | 0;
-      delay[i] = S.time + 0.5 + (d / days) * 1.8 + (i % 24) * 0.012;
+      delay[i] = reduceMotion ? 0 : S.time + 0.5 + (d / days) * 1.8 + (i % 24) * 0.012;
     } else {
       delay[i] = 0;
     }
   }
+  settling = true;
   computeBase();
   paintAll();
 }
 
+// Only bars that are moving get rewritten and uploaded. While heights are
+// settling (intro, solo, colour changes) that is all of them; the rest of the
+// time it's just the few days still bouncing after the needle passed.
+let settling = false;
+const pulsing = new Set();
+
+function writeDay(d) {
+  const m = bars.instanceMatrix.array;
+  const bump = 1 + 0.22 * pulse[d];
+  const c = cosB[d];
+  const s = sinB[d];
+  for (let h = 0; h < 24; h++) {
+    const i = d * 24 + h;
+    const hy = cur[i] * bump;
+    const vis = hy > 0.003;
+    const w = vis ? sx[i] : 1e-4;
+    const z = vis ? SZ : 1e-4;
+    const y = vis ? hy : 1e-4;
+    const o = i * 16;
+    m[o] = c * w; m[o + 1] = 0; m[o + 2] = -s * w; m[o + 3] = 0;
+    m[o + 4] = 0; m[o + 5] = y; m[o + 6] = 0; m[o + 7] = 0;
+    m[o + 8] = s * z; m[o + 9] = 0; m[o + 10] = c * z; m[o + 11] = 0;
+    m[o + 12] = px[i]; m[o + 13] = 0; m[o + 14] = pz[i]; m[o + 15] = 1;
+  }
+}
+
 function updateBars(dt) {
   const { days } = S.data;
-  const m = bars.instanceMatrix.array;
-  const k = 1 - Math.exp(-dt * 7);
+  const matrices = bars.instanceMatrix;
   const decay = Math.exp(-dt * 3.5);
-  for (let d = 0; d < days; d++) {
+  for (const d of pulsing) {
     pulse[d] *= decay;
-    const bump = 1 + 0.22 * pulse[d];
-    const c = cosB[d];
-    const s = sinB[d];
-    for (let h = 0; h < 24; h++) {
-      const i = d * 24 + h;
-      if (S.time > delay[i]) cur[i] += (target[i] - cur[i]) * k;
-      const hy = cur[i] * bump;
-      const vis = hy > 0.003;
-      const w = vis ? sx[i] : 1e-4;
-      const z = vis ? SZ : 1e-4;
-      const y = vis ? hy : 1e-4;
-      const o = i * 16;
-      m[o] = c * w; m[o + 1] = 0; m[o + 2] = -s * w; m[o + 3] = 0;
-      m[o + 4] = 0; m[o + 5] = y; m[o + 6] = 0; m[o + 7] = 0;
-      m[o + 8] = s * z; m[o + 9] = 0; m[o + 10] = c * z; m[o + 11] = 0;
-      m[o + 12] = px[i]; m[o + 13] = 0; m[o + 14] = pz[i]; m[o + 15] = 1;
+    if (pulse[d] < 0.002) {
+      pulse[d] = 0;
+      pulsing.delete(d);
     }
   }
-  bars.instanceMatrix.needsUpdate = true;
+
+  if (settling) {
+    const k = 1 - Math.exp(-dt * 7);
+    let moving = false;
+    for (let d = 0; d < days; d++) {
+      for (let h = 0; h < 24; h++) {
+        const i = d * 24 + h;
+        if (S.time <= delay[i]) { moving = true; continue; }
+        const gap = target[i] - cur[i];
+        if (Math.abs(gap) > 0.002) { cur[i] += gap * k; moving = true; } else cur[i] = target[i];
+      }
+      writeDay(d);
+    }
+    settling = moving;
+    matrices.clearUpdateRanges();
+    matrices.needsUpdate = true;
+    return;
+  }
+
+  // pulsing days, plus any that just stopped and need one last write at rest
+  for (const d of pulseTouched) {
+    writeDay(d);
+    matrices.addUpdateRange(d * 24 * 16, 24 * 16);
+  }
+  if (pulseTouched.size) matrices.needsUpdate = true;
+  pulseTouched.clear();
+  for (const d of pulsing) pulseTouched.add(d);
 }
+const pulseTouched = new Set();
 
 // ---------- needle ----------
 
@@ -693,6 +749,8 @@ function updateNeedle(force = false) {
   paintDay(prev);
   if (d >= 0) {
     pulse[d] = 1;
+    pulsing.add(d);
+    pulseTouched.add(d);
     paintDay(d);
   }
   renderNeedleCard();
@@ -1287,10 +1345,32 @@ function setHover(i) {
   else hideTooltip();
 }
 
+// Find the bar under the cursor by marching the ray down through the bar
+// layer in polar coordinates. Much cheaper than testing all 8,784 boxes.
 function pick() {
   raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObject(bars, false);
-  for (const h of hits) if (h.instanceId < S.data.N && target[h.instanceId] > 0) return h.instanceId;
+  const { origin: o, direction: dir } = raycaster.ray;
+  if (dir.y >= -1e-4) return -1;
+  const { days } = S.data;
+  const tTop = Math.max(0, (MAX_H * 1.25 - o.y) / dir.y);
+  const tEnd = -o.y / dir.y;
+  for (let t = tTop; t <= tEnd; t += 0.01) {
+    const x = o.x + dir.x * t;
+    const y = o.y + dir.y * t;
+    const z = o.z + dir.z * t;
+    const r = Math.hypot(x, z);
+    if (r < R0 || r >= R1) continue;
+    const ring = (r - R0) / RING;
+    const h = Math.floor(ring);
+    const alpha = (((-(Math.atan2(x, -z) + S.rho)) % TAU) + TAU) % TAU;
+    const f = ((alpha - GAP / 2) / SPAN) * days;
+    if (f < 0 || f >= days) continue;
+    const d = Math.floor(f);
+    const i = d * 24 + h;
+    if (target[i] <= 0 || y > cur[i] * (1 + 0.22 * pulse[d])) continue;
+    // inside the box, not the gap between neighbours
+    if (Math.abs(ring - h - 0.5) <= 0.37 && Math.abs(f - d - 0.5) <= 0.36) return i;
+  }
   return -1;
 }
 
@@ -1333,7 +1413,7 @@ function frame() {
   }
 
   // Left alone (say on a second monitor), the camera drifts around the record.
-  if (!S.camTween && S.time - lastInput > 30) controls.autoRotate = true;
+  if (!S.camTween && !reduceMotion && S.time - lastInput > 30) controls.autoRotate = true;
 
   if (S.camTween) {
     const tw = S.camTween;
@@ -1399,7 +1479,8 @@ function frame() {
   setRpm(RPM[prefs.rpm] ? prefs.rpm : 33, false);
   if (['artist', 'hour', 'heat'].includes(prefs.colorMode)) S.colorMode = prefs.colorMode;
   setDataset(demoRecords(), 'demo');
-  S.camTween = { from: camera.position.clone(), to: homePosition(), t: 0, dur: 2.6 };
+  if (reduceMotion) camera.position.copy(homePosition());
+  else S.camTween = { from: camera.position.clone(), to: homePosition(), t: 0, dur: 2.6 };
   setTimeout(() => { if (hintShown) $('#hint').classList.add('gone'); }, 12000);
   frame();
 })();
@@ -1413,5 +1494,6 @@ window.spinback = {
     S.camTween = null;
     camera.position.copy(homePosition());
     cur.set(target);
+    settling = true;
   },
 };
