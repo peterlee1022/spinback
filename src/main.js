@@ -640,16 +640,19 @@ function paint(i) {
   a[i * 3] = base[i * 3] * f;
   a[i * 3 + 1] = base[i * 3 + 1] * f;
   a[i * 3 + 2] = base[i * 3 + 2] * f;
-  bars.instanceColor.addUpdateRange(i * 3, 3);
+  // after a full repaint the whole buffer goes up this frame, so don't narrow it
+  if (!fullColorUpload) bars.instanceColor.addUpdateRange(i * 3, 3);
   bars.instanceColor.needsUpdate = true;
 }
+let fullColorUpload = false;
 function paintDay(d) {
   if (d < 0) return;
   for (let h = 0; h < 24; h++) paint(d * 24 + h);
 }
 function paintAll() {
-  for (let i = 0; i < S.data.N; i++) paint(i);
+  fullColorUpload = true;
   bars.instanceColor.clearUpdateRanges();
+  for (let i = 0; i < S.data.N; i++) paint(i);
 }
 
 function applyTargets(intro) {
@@ -1481,6 +1484,7 @@ function frame() {
   scene.fog.near = camDist + 15;
   scene.fog.far = camDist + 90;
   composer.render();
+  fullColorUpload = false;
 }
 
 // ---------- boot ----------
