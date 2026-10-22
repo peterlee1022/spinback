@@ -2,10 +2,10 @@ import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
   readFiles, listPeriods, pickPeriod, buildPeriod, dateAt, demoRecords, cellTracks, daySummary, linerNotes, artistMinutes,
@@ -56,17 +56,46 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.NeutralToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.1;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+
+// A dark studio with a few softboxes, used only for reflections. Gives the
+// glossy surfaces long clean highlights instead of a generic room.
+function studioEnvironment() {
+  const env = new THREE.Scene();
+  env.background = new THREE.Color('#060607');
+  const softbox = (w, h, pos, look, intensity, color = '#ffffff') => {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(intensity), side: THREE.DoubleSide }),
+    );
+    m.position.set(...pos);
+    m.lookAt(...look);
+    env.add(m);
+  };
+  softbox(16, 6, [0, 10, 2], [0, 0, 0], 3.2);
+  softbox(3, 12, [-11, 3, 6], [0, 0, 0], 1.6, '#ffe9d6');
+  softbox(3, 12, [10, 3, -8], [0, 0, 0], 1.2, '#d6e0ff');
+  // faint horizon band all the way round so metal edges always catch something
+  const band = new THREE.Mesh(
+    new THREE.CylinderGeometry(24, 24, 4, 48, 1, true),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffffff').multiplyScalar(0.9), side: THREE.BackSide }),
+  );
+  band.position.y = 1;
+  env.add(band);
+  const tex = pmrem.fromScene(env, 0.035).texture;
+  env.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+  return tex;
+}
 
 const scene = new THREE.Scene();
 const BG = new THREE.Color('#0c0c0e');
 scene.background = BG;
 scene.fog = new THREE.Fog(BG, 60, 130);
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.5;
+scene.environment = studioEnvironment();
+scene.environmentIntensity = 0.9;
 
 const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.1, 400);
 const controls = new OrbitControls(camera, canvas);
@@ -91,8 +120,12 @@ camera.position.set(0, 70, 8);
 
 // ---------- lights ----------
 
-scene.add(new THREE.HemisphereLight('#dfe3ff', '#16120e', 0.55));
-const key = new THREE.DirectionalLight('#fff3e3', 2.6);
+scene.add(new THREE.HemisphereLight('#eef0f5', '#1a1714', 0.75));
+// soft fill from the viewer's side so bar faces don't drop into black
+const fill = new THREE.DirectionalLight('#fff8f0', 1.1);
+fill.position.set(18, 14, 26);
+scene.add(fill);
+const key = new THREE.DirectionalLight('#fff3e3', 2.1);
 key.position.set(-14, 30, 12);
 key.castShadow = true;
 key.shadow.mapSize.set(4096, 4096);
@@ -146,7 +179,7 @@ const PLINTH_TOP = -0.75;
 const FLOOR_Y = -3.35;
 const plinth = new THREE.Mesh(
   new RoundedBoxGeometry(41, 2.2, 35, 4, 0.45),
-  new THREE.MeshStandardMaterial({ color: '#131315', roughness: 0.62, metalness: 0.1 }),
+  new THREE.MeshStandardMaterial({ color: '#18181b', roughness: 0.48, metalness: 0.55 }),
 );
 plinth.position.set(3.5, PLINTH_TOP - 1.1, 0);
 plinth.receiveShadow = true;
@@ -154,7 +187,7 @@ plinth.castShadow = true;
 scene.add(plinth);
 
 // brushed top plate, inset a little from the edge of the body
-const plateMat = new THREE.MeshStandardMaterial({ color: '#1b1b1e', roughness: 0.55, metalness: 0.3 });
+const plateMat = new THREE.MeshPhysicalMaterial({ color: '#0d0d0f', roughness: 0.3, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08 });
 {
   const plate = new THREE.Mesh(new RoundedBoxGeometry(40, 0.14, 34, 2, 0.06), plateMat);
   plate.position.set(3.5, PLINTH_TOP + 0.04, 0);
@@ -175,8 +208,8 @@ const plateMat = new THREE.MeshStandardMaterial({ color: '#1b1b1e', roughness: 0
   pool.width = pool.height = 512;
   const g = pool.getContext('2d');
   const grad = g.createRadialGradient(256, 256, 0, 256, 256, 256);
-  grad.addColorStop(0, '#2a2a2e');
-  grad.addColorStop(0.45, '#17171a');
+  grad.addColorStop(0, '#1d1d21');
+  grad.addColorStop(0.45, '#131316');
   grad.addColorStop(1, '#0c0c0e');
   g.fillStyle = grad;
   g.fillRect(0, 0, 512, 512);
@@ -260,7 +293,7 @@ scene.add(disc);
 
 const platter = new THREE.Mesh(
   new THREE.CylinderGeometry(14.9, 14.9, 0.62, 160),
-  new THREE.MeshStandardMaterial({ color: '#a4a9bb', metalness: 1, roughness: 0.26 }),
+  new THREE.MeshStandardMaterial({ color: '#c6c8ce', metalness: 1, roughness: 0.3 }),
 );
 platter.position.y = -0.39;
 platter.receiveShadow = true;
@@ -319,7 +352,7 @@ function grooveTexture() {
 
 const vinyl = new THREE.Mesh(
   new THREE.CylinderGeometry(VINYL_R, VINYL_R, 0.1, 160),
-  new THREE.MeshPhysicalMaterial({ map: grooveTexture(), roughness: 0.42, metalness: 0.1, clearcoat: 0.7, clearcoatRoughness: 0.25 }),
+  new THREE.MeshPhysicalMaterial({ map: grooveTexture(), roughness: 0.5, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.14 }),
 );
 vinyl.position.y = -0.05;
 vinyl.receiveShadow = true;
@@ -410,14 +443,14 @@ let armLift = 0;
 
 const barGeo = new THREE.BoxGeometry(1, 1, 1);
 barGeo.translate(0, 0.5, 0);
-const barMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0 });
+const barMat = new THREE.MeshPhysicalMaterial({ roughness: 0.55, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.3 });
 barMat.onBeforeCompile = (shader) => {
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nvarying float vBarH;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBarH = position.y * instanceMatrix[1][1];');
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', '#include <common>\nvarying float vBarH;')
-    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(0.38, 1.0, smoothstep(0.0, 0.7, vBarH));');
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(0.62, 1.0, smoothstep(0.0, 0.5, vBarH));');
 };
 const bars = new THREE.InstancedMesh(barGeo, barMat, MAX_CELLS);
 bars.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -452,6 +485,11 @@ const otherColor = new THREE.Color(OTHER_COLOR);
 // Multisampled target so the bars keep clean edges through the bloom pass.
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
+// soft contact shadows between the bars and where they meet the record
+const gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 2, thickness: 1, scale: 1, samples: 12 });
+gtao.blendIntensity = 0.45;
+composer.addPass(gtao);
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.5, 0.92);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -1423,6 +1461,7 @@ function frame() {
       lowQuality = true;
       renderer.setPixelRatio(1);
       composer.setPixelRatio(1);
+      gtao.enabled = false;
     }
   }
 
