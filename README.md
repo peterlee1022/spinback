@@ -13,10 +13,9 @@ Every day of the year is a spoke on the disc and every hour is a groove ring, wi
 - Hover any bar to see what you were playing that hour, and click it to drop the needle on that day.
 - Grab the record and drag it to scratch back and forth through the year. Give it a flick and it keeps spinning. Drag around the record or right-drag to orbit the camera instead.
 - Click an artist in the legend to press a record of just them. Seasonal phases show up really clearly this way. The search box under the legend finds anyone else you listened to.
-- Switch the colours between artist, hour of day and heat. Colouring by hour turns your daily routine into rings, and it is usually the calmer view for real data with lots of artists.
-- Open the liner notes for your song of the year, longest streak, the song you put on loop, how much of a night owl you are and a few more.
-- Save a snapshot of the record as a PNG to share.
-- Switch between 33, 45 and 78 rpm, pause to lift the arm, and turn the sound on for crackle and scratching.
+- Switch the colours between artist, time of day and minutes. Colouring by time turns your daily routine into rings, and it is usually the calmer view for real data with lots of artists.
+- Open the liner notes for your song of the year, busiest day, longest streak, the song you put on loop, how much of a night owl you are and a few more. You can save a snapshot of the record as a PNG from there too.
+- Change the speed between 33, 45 and 78 rpm, pause to lift the arm, and turn the sound on for crackle and scratching. The start/stop and speed buttons on the turntable itself work too.
 - Space pauses, and the left and right arrow keys step the needle one day at a time.
 - Leave it alone for a bit and the camera starts drifting around the record, which makes it a nice thing to have open on a second monitor.
 
